@@ -1,0 +1,295 @@
+<main class="relative grid min-h-dvh place-items-center bg-app p-4 font-sans text-main sm:p-6">
+  <button
+    class="fixed bottom-5 right-5 z-20 rounded-md border border-line bg-surface px-4 py-3 text-sm font-bold text-main shadow-lg transition duration-200 hover:border-primary hover:text-primary"
+    type="button"
+    (click)="openAccounts()"
+  >
+    Administrar cuentas
+  </button>
+
+  <section class="w-full max-w-[520px] rounded-lg border border-line bg-surface p-6 shadow-lg sm:p-7">
+    <div class="mb-6 flex items-center gap-4">
+      <span
+        class="grid h-12 w-12 shrink-0 place-items-center rounded-md text-xl font-bold text-white transition duration-200"
+        [ngClass]="role() === 'paciente' ? 'bg-info' : 'bg-primary'"
+      >
+        R
+      </span>
+      <div>
+        <p class="m-0 text-xs font-bold uppercase tracking-wide text-secondary">RehabWeb</p>
+        <h1 class="m-0 text-xl font-bold leading-solid text-main">Acceso seguro</h1>
+      </div>
+    </div>
+
+    <div class="mb-5 grid grid-cols-[1fr_58px_1fr] items-center gap-2" role="group" aria-label="Seleccionar rol">
+      <button
+        class="min-h-11 rounded-md border px-3 text-sm font-bold transition duration-200"
+        [ngClass]="
+          role() === 'terapeuta'
+            ? 'border-primary bg-primary-low text-primary'
+            : 'border-line bg-app text-secondary hover:border-primary hover:text-primary'
+        "
+        type="button"
+        (click)="setRole('terapeuta')"
+      >
+        Terapeuta
+      </button>
+      <button
+        class="relative min-h-11 rounded-full border border-line bg-line transition duration-200"
+        type="button"
+        (click)="toggleRole()"
+        aria-label="Cambiar rol"
+      >
+        <span
+          class="absolute left-[7px] top-[6px] h-[30px] w-[30px] rounded-full transition duration-200"
+          [ngClass]="role() === 'paciente' ? 'translate-x-[14px] bg-info' : 'bg-primary'"
+        ></span>
+      </button>
+      <button
+        class="min-h-11 rounded-md border px-3 text-sm font-bold transition duration-200"
+        [ngClass]="
+          role() === 'paciente'
+            ? 'border-info bg-info/10 text-info'
+            : 'border-line bg-app text-secondary hover:border-info hover:text-info'
+        "
+        type="button"
+        (click)="setRole('paciente')"
+      >
+        Paciente
+      </button>
+    </div>
+
+    <div class="mb-6 grid gap-3 sm:grid-cols-2">
+      <article
+        class="grid min-h-28 gap-2 rounded-md border p-4 transition duration-200"
+        [ngClass]="role() === 'terapeuta' ? 'border-primary text-primary shadow-sm' : 'border-line text-main opacity-75'"
+      >
+        <h2 class="m-0 text-base font-bold leading-solid">Terapeuta</h2>
+        <p class="m-0 text-sm leading-default text-secondary">Gestiona conversaciones, consultas y seguimiento clínico.</p>
+        <button
+          class="rounded-md border border-line bg-app px-3 py-2 text-sm font-bold text-main transition duration-200 hover:border-primary hover:text-primary"
+          type="button"
+          (click)="openAccounts('terapeutas', true)"
+        >
+          Crear cuenta
+        </button>
+      </article>
+      <article
+        class="grid min-h-28 gap-2 rounded-md border p-4 transition duration-200"
+        [ngClass]="role() === 'paciente' ? 'border-info text-info shadow-sm' : 'border-line text-main opacity-75'"
+      >
+        <h2 class="m-0 text-base font-bold leading-solid">Paciente</h2>
+        <p class="m-0 text-sm leading-default text-secondary">Consulta tus mensajes y accede a sesiones con tu terapeuta.</p>
+        <button
+          class="rounded-md border border-line bg-app px-3 py-2 text-sm font-bold text-main transition duration-200 hover:border-info hover:text-info"
+          type="button"
+          (click)="openAccounts('pacientes', true)"
+        >
+          Crear cuenta
+        </button>
+      </article>
+    </div>
+
+    <form class="grid gap-4" [formGroup]="loginForm" (ngSubmit)="submit()" novalidate>
+      <label class="grid gap-2 text-sm font-bold text-main">
+        Usuario
+        <input
+          class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 placeholder:text-muted focus:border-focus focus:ring-2 focus:ring-focus/20"
+          type="text"
+          formControlName="username"
+          autocomplete="username"
+        />
+      </label>
+
+      <label class="grid gap-2 text-sm font-bold text-main">
+        Contraseña
+        <input
+          class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 placeholder:text-muted focus:border-focus focus:ring-2 focus:ring-focus/20"
+          type="password"
+          formControlName="password"
+          autocomplete="current-password"
+        />
+      </label>
+
+      @if (errorMsg()) {
+        <p class="m-0 rounded-md border border-danger bg-danger-bg px-3 py-2 text-sm font-bold text-danger">{{ errorMsg() }}</p>
+      }
+
+      <button
+        class="min-h-12 rounded-md px-4 text-base font-bold text-white transition duration-200 disabled:cursor-progress disabled:opacity-70"
+        [ngClass]="role() === 'paciente' ? 'bg-info hover:bg-info/90' : 'bg-primary hover:bg-primary/90'"
+        type="submit"
+        [disabled]="loading()"
+      >
+        {{ loading() ? 'Entrando...' : 'Entrar como ' + (role() === 'terapeuta' ? 'terapeuta' : 'paciente') }}
+      </button>
+    </form>
+  </section>
+
+  @if (accountModalOpen()) {
+    <div class="fixed inset-0 z-50 grid place-items-center bg-nav/45 p-4">
+      <section class="max-h-[92dvh] w-full max-w-6xl overflow-auto rounded-lg bg-surface p-5 text-main shadow-lg sm:p-6" aria-modal="true" role="dialog">
+        <header class="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p class="m-0 text-xs font-bold uppercase tracking-wide text-secondary">Administración</p>
+            <h2 class="m-0 text-xl font-bold leading-solid">Cuentas RehabWeb</h2>
+          </div>
+          <button
+            class="grid h-10 w-10 place-items-center rounded-md border border-line bg-app text-lg font-bold text-main transition duration-200 hover:border-danger hover:text-danger"
+            type="button"
+            (click)="closeAccounts()"
+            aria-label="Cerrar"
+          >
+            x
+          </button>
+        </header>
+
+        <div class="mb-4 grid gap-3 sm:grid-cols-2" role="tablist">
+          <button
+            class="rounded-md border px-4 py-3 text-sm font-bold transition duration-200"
+            [ngClass]="accountRole() === 'terapeutas' ? 'border-primary bg-primary-low text-primary' : 'border-line bg-app text-main hover:border-primary'"
+            type="button"
+            (click)="setAccountRole('terapeutas')"
+          >
+            Terapeutas actuales
+          </button>
+          <button
+            class="rounded-md border px-4 py-3 text-sm font-bold transition duration-200"
+            [ngClass]="accountRole() === 'pacientes' ? 'border-primary bg-primary-low text-primary' : 'border-line bg-app text-main hover:border-primary'"
+            type="button"
+            (click)="setAccountRole('pacientes')"
+          >
+            Pacientes actuales
+          </button>
+        </div>
+
+        <div class="grid gap-5 lg:grid-cols-[minmax(280px,0.85fr)_minmax(320px,1.15fr)]">
+          <section class="grid content-start gap-3">
+            @if (accountLoading()) {
+              <p class="m-0 text-sm text-secondary">Cargando cuentas...</p>
+            } @else {
+              @for (account of accounts(); track account.id) {
+                <article class="grid gap-3 rounded-md border border-line bg-surface p-3 shadow-sm">
+                  <div>
+                    <strong class="block text-sm font-bold text-main">{{ account.nombre_completo || account.username }}</strong>
+                    <span class="block text-sm leading-default text-secondary">{{ account.username }} | {{ account.email || 'Sin correo' }}</span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button class="rounded-md border border-line bg-app px-3 py-2 text-sm font-bold text-main transition duration-200 hover:border-primary hover:text-primary" type="button" (click)="editAccount(account)">
+                      Editar
+                    </button>
+                    <button class="rounded-md border border-danger bg-danger-bg px-3 py-2 text-sm font-bold text-danger transition duration-200 hover:bg-danger hover:text-white" type="button" (click)="deleteAccount(account)">
+                      Borrar
+                    </button>
+                  </div>
+                </article>
+              } @empty {
+                <p class="m-0 text-sm text-secondary">No hay cuentas registradas.</p>
+              }
+            }
+          </section>
+
+          <form class="grid gap-4 rounded-lg border border-line bg-surface p-4 shadow-sm" [formGroup]="accountForm" (ngSubmit)="saveAccount()">
+            <h3 class="m-0 text-lg font-bold leading-solid">{{ editingAccountId() ? 'Editar cuenta' : 'Nueva cuenta' }}</h3>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="grid gap-2 text-sm font-bold text-main">
+                Usuario
+                <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="text" formControlName="username" autocomplete="off" />
+              </label>
+              <label class="grid gap-2 text-sm font-bold text-main">
+                Contraseña
+                <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="password" formControlName="password" autocomplete="new-password" />
+              </label>
+              <label class="grid gap-2 text-sm font-bold text-main">
+                Nombre completo
+                <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="text" formControlName="nombre_completo" />
+              </label>
+              <label class="grid gap-2 text-sm font-bold text-main">
+                Correo
+                <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="email" formControlName="email" />
+              </label>
+
+              @if (accountRole() === 'terapeutas') {
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Especialidad
+                  <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="text" formControlName="especialidad" />
+                </label>
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Número de licencia
+                  <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="text" formControlName="numero_licencia" />
+                </label>
+              } @else {
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Terapeuta asignado
+                  <select class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" formControlName="terapeuta_id">
+                    <option value="">Sin asignar</option>
+                    @for (therapist of therapistOptions(); track therapist.id) {
+                      <option [value]="therapist.id">{{ therapist.nombre_completo || therapist.username }}</option>
+                    }
+                  </select>
+                </label>
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Fecha de nacimiento
+                  <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="date" formControlName="fecha_nacimiento" />
+                </label>
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Estado
+                  <select class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" formControlName="estado">
+                    <option value="activo">Activo</option>
+                    <option value="inactivo">Inactivo</option>
+                  </select>
+                </label>
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Nivel movilidad
+                  <select class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" formControlName="nivel_movilidad">
+                    <option value="bajo">Bajo</option>
+                    <option value="medio">Medio</option>
+                    <option value="alto">Alto</option>
+                    <option value="dependiente">Dependiente</option>
+                  </select>
+                </label>
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Estrategia validación
+                  <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="text" formControlName="estrategia_validacion" />
+                </label>
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Estrategia progreso
+                  <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="text" formControlName="estrategia_progreso" />
+                </label>
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Diagnóstico principal
+                  <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="text" formControlName="diagnostico_principal" />
+                </label>
+                <label class="grid gap-2 text-sm font-bold text-main">
+                  Restricciones
+                  <input class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" type="text" formControlName="restricciones" />
+                </label>
+                <label class="grid gap-2 text-sm font-bold text-main sm:col-span-2">
+                  Historial médico
+                  <textarea class="w-full rounded-md border border-line bg-surface px-4 py-3 text-base text-main outline-none transition duration-200 focus:border-focus focus:ring-2 focus:ring-focus/20" formControlName="historial_medico" rows="3"></textarea>
+                </label>
+              }
+            </div>
+
+            @if (accountError()) {
+              <p class="m-0 rounded-md border border-danger bg-danger-bg px-3 py-2 text-sm font-bold text-danger">{{ accountError() }}</p>
+            }
+            @if (accountSuccess()) {
+              <p class="m-0 rounded-md border border-primary bg-primary-low px-3 py-2 text-sm font-bold text-primary">{{ accountSuccess() }}</p>
+            }
+
+            <div class="flex flex-wrap items-center justify-end gap-3">
+              <button class="rounded-md border border-line bg-app px-4 py-3 text-sm font-bold text-main transition duration-200 hover:border-primary hover:text-primary" type="button" (click)="resetAccountForm()">
+                Limpiar
+              </button>
+              <button class="rounded-md bg-primary px-4 py-3 text-sm font-bold text-white transition duration-200 hover:bg-primary/90 disabled:cursor-progress disabled:opacity-70" type="submit" [disabled]="accountLoading()">
+                {{ editingAccountId() ? 'Guardar cambios' : 'Crear cuenta' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+  }
+</main>

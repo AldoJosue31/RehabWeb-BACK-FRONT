@@ -1,0 +1,15 @@
+.git
+.git-backup-*
+node_modules
+dist
+tmp
+out-tsc
+bazel-out
+.angular
+coverage
+npm-debug.log
+yarn-error.log
+.idea
+.vscode
+.history
+__screenshots__
