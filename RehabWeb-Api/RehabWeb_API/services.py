@@ -16,11 +16,15 @@ from RehabWeb_API.models import (
 
 
 BADGES = {
-    'FIRST_SESSION': ('Primer paso', 'Completo su primera sesion.'),
+    'FIRST_SESSION': ('Primer Paso', 'Celebra el inicio de su viaje.'),
     'STREAK_3': ('Constancia 3 dias', 'Completo sesiones durante 3 dias seguidos.'),
-    'STREAK_7': ('Semana constante', 'Completo sesiones durante 7 dias seguidos.'),
-    'POINTS_100': ('100 puntos', 'Acumulo sus primeros 100 puntos.'),
+    'STREAK_7': ('Semana Completa', 'Completo 7 sesiones consecutivas.'),
+    'STREAK_30': ('Mes Dedicado', 'Completo 30 sesiones consecutivas.'),
+    'POINTS_100': ('Fortaleza', 'Acumulo sus primeros 100 puntos.'),
+    'POINTS_500': ('Superestrella', 'Acumulo 500 puntos.'),
     'HIGH_REPS_100': ('100 repeticiones', 'Completo 100 repeticiones en una sesion.'),
+    'SPEED_20': ('Velocidad', 'Completo una sesion al menos 20% mas rapido.'),
+    'COGNITIVE_5': ('Cerebro Ganador', 'Completo ejercicios cognitivos 5 veces.'),
 }
 
 
@@ -53,8 +57,15 @@ def is_minor(patient, today=None):
     return age < 18
 
 
-def calculate_speed_bonus(repetitions, duration_seconds):
+def calculate_speed_bonus(repetitions, duration_seconds, planned_duration_seconds=0):
     if not repetitions or not duration_seconds:
+        return 0
+
+    if planned_duration_seconds:
+        ten_minutes_early = duration_seconds <= max(planned_duration_seconds - 600, 0)
+        twenty_percent_faster = duration_seconds <= planned_duration_seconds * 0.8
+        if ten_minutes_early or twenty_percent_faster:
+            return max(1, round(repetitions * 0.10))
         return 0
 
     reps_per_minute = repetitions / max(duration_seconds / 60, 1)
@@ -63,6 +74,14 @@ def calculate_speed_bonus(repetitions, duration_seconds):
     if reps_per_minute >= 15:
         return max(1, round(repetitions * 0.10))
     return 0
+
+
+def reset_expired_streak(profile, reference_date=None):
+    reference_date = reference_date or timezone.localdate()
+    if profile.last_session_date and profile.last_session_date < reference_date - timedelta(days=1):
+        profile.current_streak = 0
+        profile.save(update_fields=['current_streak', 'updated_at'])
+    return profile.current_streak
 
 
 def update_streak(profile, session_date):
@@ -106,21 +125,46 @@ def evaluate_badges(session, profile):
     created = []
     total_sessions = ExerciseSession.objects.filter(paciente=session.paciente).count()
     if total_sessions == 1:
-        _, was_created = award_badge(session.paciente, 'FIRST_SESSION', session)
-        created.append(was_created)
+        badge, was_created = award_badge(session.paciente, 'FIRST_SESSION', session)
+        if was_created:
+            created.append(badge)
     if session.streak_days >= 3:
-        _, was_created = award_badge(session.paciente, 'STREAK_3', session)
-        created.append(was_created)
+        badge, was_created = award_badge(session.paciente, 'STREAK_3', session)
+        if was_created:
+            created.append(badge)
     if session.streak_days >= 7:
-        _, was_created = award_badge(session.paciente, 'STREAK_7', session)
-        created.append(was_created)
+        badge, was_created = award_badge(session.paciente, 'STREAK_7', session)
+        if was_created:
+            created.append(badge)
+    if session.streak_days >= 30:
+        badge, was_created = award_badge(session.paciente, 'STREAK_30', session)
+        if was_created:
+            created.append(badge)
     if profile.total_points >= 100:
-        _, was_created = award_badge(session.paciente, 'POINTS_100', session)
-        created.append(was_created)
+        badge, was_created = award_badge(session.paciente, 'POINTS_100', session)
+        if was_created:
+            created.append(badge)
+    if profile.total_points >= 500:
+        badge, was_created = award_badge(session.paciente, 'POINTS_500', session)
+        if was_created:
+            created.append(badge)
     if session.repetitions_completed >= 100:
-        _, was_created = award_badge(session.paciente, 'HIGH_REPS_100', session)
-        created.append(was_created)
-    return any(created)
+        badge, was_created = award_badge(session.paciente, 'HIGH_REPS_100', session)
+        if was_created:
+            created.append(badge)
+    if session.planned_duration_seconds and session.duration_seconds <= session.planned_duration_seconds * 0.8:
+        badge, was_created = award_badge(session.paciente, 'SPEED_20', session)
+        if was_created:
+            created.append(badge)
+    cognitive_sessions = ExerciseSession.objects.filter(
+        paciente=session.paciente,
+        exercise_name__icontains='cognitiv',
+    ).count()
+    if cognitive_sessions >= 5:
+        badge, was_created = award_badge(session.paciente, 'COGNITIVE_5', session)
+        if was_created:
+            created.append(badge)
+    return created
 
 
 def generate_session_alerts(session):
@@ -170,9 +214,13 @@ def generate_session_alerts(session):
 def finalize_session_metrics(session):
     profile, _ = MotivationProfile.objects.get_or_create(usuario=session.paciente)
     session_date = timezone.localdate(session.performed_at)
-    speed_bonus = calculate_speed_bonus(session.repetitions_completed, session.duration_seconds)
+    speed_bonus = calculate_speed_bonus(
+        session.repetitions_completed,
+        session.duration_seconds,
+        session.planned_duration_seconds,
+    )
     streak_days = update_streak(profile, session_date)
-    streak_bonus = min(0.5, max(0, (streak_days - 1) * 0.05))
+    streak_bonus = min(0.5, max(0, (streak_days - 1) * 0.10))
     base_points = session.repetitions_completed + speed_bonus
     points = round(base_points * (1 + streak_bonus))
 
@@ -180,6 +228,12 @@ def finalize_session_metrics(session):
     session.streak_days = streak_days
     session.points_awarded = points
     session.positive_feedback = feedback_for_session(session)
+    if not session.performance_notes:
+        session.performance_notes = (
+            f'Desempeno registrado: {session.repetitions_completed}/'
+            f'{session.planned_repetitions or session.repetitions_completed} repeticiones, '
+            f'{session.duration_seconds} segundos, dolor {session.pain_level}/10.'
+        )
     profile.total_points += points
     profile.save()
     session.save(update_fields=[
@@ -187,6 +241,7 @@ def finalize_session_metrics(session):
         'streak_days',
         'points_awarded',
         'positive_feedback',
+        'performance_notes',
     ])
 
     evaluate_badges(session, profile)
@@ -253,7 +308,35 @@ def build_weekly_summary(patient, week_end=None):
     return summary
 
 
+def build_and_send_weekly_summaries(reference_date=None):
+    reference_date = reference_date or timezone.localdate()
+    if reference_date.weekday() != 6:
+        return 0
+
+    sent = 0
+    patients = PacienteProfile.objects.select_related('usuario').filter(usuario__is_active=True)
+    for patient_profile in patients:
+        summary = build_weekly_summary(patient_profile.usuario, reference_date)
+        if patient_profile.usuario.email:
+            send_mail(
+                subject='RehabWeb: resumen semanal de progreso',
+                message=(
+                    f'Sesiones completadas: {summary.sessions_completed}/'
+                    f'{summary.sessions_scheduled}. Puntos obtenidos: {summary.points_obtained}.'
+                ),
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'rehabweb@localhost'),
+                recipient_list=[patient_profile.usuario.email],
+                fail_silently=True,
+            )
+        sent += 1
+    return sent
+
+
 def leaderboard_top10():
+    expired_profiles = MotivationProfile.objects.select_related('usuario').filter(leaderboard_opt_in=True)
+    for profile in expired_profiles:
+        reset_expired_streak(profile)
+
     minor_ids = [profile.usuario_id for profile in PacienteProfile.objects.select_related('usuario')]
     eligible_profiles = []
     for profile in MotivationProfile.objects.select_related('usuario').filter(leaderboard_opt_in=True).order_by('-total_points'):

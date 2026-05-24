@@ -35,6 +35,11 @@ import {
                 <p class="m-0 mt-1 text-sm text-secondary">
                   +{{ session.points_awarded }} puntos &middot; bonus velocidad {{ session.speed_bonus_points }} &middot; racha {{ session.streak_days }} d&iacute;as
                 </p>
+                @if (newlyUnlockedBadges().length) {
+                  <p class="m-0 mt-2 text-sm font-bold text-primary">
+                    Insignia desbloqueada: {{ newlyUnlockedBadges()[0].name }}
+                  </p>
+                }
               </div>
               <span class="rounded-md bg-surface px-4 py-2 text-sm font-bold text-primary">Visualizaci&oacute;n inmediata</span>
             </div>
@@ -78,17 +83,23 @@ import {
                   <input class="rw-input normal-case tracking-normal" type="number" min="0" formControlName="duration_seconds" />
                 </label>
                 <label class="grid min-w-0 gap-2 text-xs font-bold uppercase tracking-wide text-secondary">
-                  Dolor 0-10
-                  <input class="rw-input normal-case tracking-normal" type="number" min="0" max="10" formControlName="pain_level" />
+                  Tiempo estimado (seg)
+                  <input class="rw-input normal-case tracking-normal" type="number" min="0" formControlName="planned_duration_seconds" />
                 </label>
               </div>
 
-              <label class="grid min-w-0 gap-2 text-xs font-bold uppercase tracking-wide text-secondary">
-                Movilidad (opcional)
-                <input class="rw-input normal-case tracking-normal" type="number" min="0" step="0.01" formControlName="mobility_score" />
-              </label>
+              <div class="grid min-w-0 gap-4 sm:grid-cols-2">
+                <label class="grid min-w-0 gap-2 text-xs font-bold uppercase tracking-wide text-secondary">
+                  Dolor 0-10
+                  <input class="rw-input normal-case tracking-normal" type="number" min="0" max="10" formControlName="pain_level" />
+                </label>
+                <label class="grid min-w-0 gap-2 text-xs font-bold uppercase tracking-wide text-secondary">
+                  Movilidad (opcional)
+                  <input class="rw-input normal-case tracking-normal" type="number" min="0" step="0.01" formControlName="mobility_score" />
+                </label>
+              </div>
 
-              <button class="rw-action rw-action--primary" type="submit" [disabled]="sessionForm.invalid || saving()">
+              <button class="rw-action rw-action--primary" type="button" [disabled]="sessionForm.invalid || saving()" (click)="submit()">
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
                 Guardar sesi&oacute;n
               </button>
@@ -173,6 +184,7 @@ export class SessionsComponent implements OnInit {
   patients = signal<RoleAccount[]>([]);
   motivation = signal<MotivationProfile | null>(null);
   badges = signal<PatientBadge[]>([]);
+  newlyUnlockedBadges = signal<PatientBadge[]>([]);
   lastSession = signal<ExerciseSession | null>(null);
   role = computed(() => this.authService.getRole() ?? 'paciente');
 
@@ -182,6 +194,7 @@ export class SessionsComponent implements OnInit {
     repetitions_completed: [10, [Validators.required, Validators.min(0)]],
     planned_repetitions: [10, [Validators.required, Validators.min(0)]],
     duration_seconds: [60, [Validators.required, Validators.min(0)]],
+    planned_duration_seconds: [900, [Validators.required, Validators.min(0)]],
     pain_level: [0, [Validators.required, Validators.min(0), Validators.max(10)]],
     mobility_score: [null as number | null],
   });
@@ -210,13 +223,15 @@ export class SessionsComponent implements OnInit {
     if (this.sessionForm.invalid) return;
 
     const raw = this.sessionForm.getRawValue();
+    const mobilityScore = raw.mobility_score as number | string | null;
     const payload: Partial<ExerciseSession> = {
       exercise_name: raw.exercise_name,
       repetitions_completed: raw.repetitions_completed,
       planned_repetitions: raw.planned_repetitions,
       duration_seconds: raw.duration_seconds,
+      planned_duration_seconds: raw.planned_duration_seconds,
       pain_level: raw.pain_level,
-      mobility_score: raw.mobility_score === null ? null : String(raw.mobility_score),
+      mobility_score: mobilityScore === null || mobilityScore === '' ? null : String(mobilityScore),
     };
     if (this.role() === 'terapeuta') payload.paciente = raw.paciente;
 
@@ -224,6 +239,7 @@ export class SessionsComponent implements OnInit {
     this.engagementService.createSession(payload).subscribe({
       next: (session) => {
         this.lastSession.set(session);
+        this.newlyUnlockedBadges.set(session.new_badges ?? []);
         this.sessions.update((sessions) => [session, ...sessions]);
         this.saving.set(false);
         this.celebrate();
@@ -256,5 +272,16 @@ export class SessionsComponent implements OnInit {
     gain.connect(context.destination);
     oscillator.start();
     oscillator.stop(context.currentTime + 0.12);
+
+    if (this.newlyUnlockedBadges().length) {
+      const badgeOscillator = context.createOscillator();
+      const badgeGain = context.createGain();
+      badgeOscillator.frequency.value = 880;
+      badgeGain.gain.value = 0.04;
+      badgeOscillator.connect(badgeGain);
+      badgeGain.connect(context.destination);
+      badgeOscillator.start(context.currentTime + 0.14);
+      badgeOscillator.stop(context.currentTime + 0.28);
+    }
   }
 }
