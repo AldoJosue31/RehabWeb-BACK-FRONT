@@ -61,6 +61,14 @@ export class MensajeriaService {
     );
   }
 
+  obtenerDatosVideollamada(roomId: string, conversationId?: number): Observable<BackendVideoCall> {
+    return this.http.post<BackendVideoCall>(
+      `${this.apiUrl}/videollamadas/datos_sala/`,
+      { room_id: roomId, conversation_id: conversationId },
+      this.httpOptions,
+    );
+  }
+
   finalizarVideollamada(callId: number): Observable<{ status: string; duracion_minutos: number }> {
     return this.http.post<{ status: string; duracion_minutos: number }>(
       `${this.apiUrl}/videollamadas/${callId}/finalizar_llamada/`,

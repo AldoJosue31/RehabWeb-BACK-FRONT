@@ -44,4 +44,9 @@ export interface BackendVideoCall {
   status: 'programada' | 'activa' | 'finalizada' | 'cancelada';
   duration_minutes: number;
   join_url: string;
+  room_name: string;
+  jitsi_domain: string;
+  jitsi_script_url: string;
+  jitsi_jwt: string | null;
+  is_moderator: boolean;
 }

@@ -190,7 +190,19 @@
           </section>
 
           <form class="grid gap-4 rounded-lg border border-line bg-surface p-4 shadow-sm" [formGroup]="accountForm" (ngSubmit)="saveAccount()">
-            <h3 class="m-0 text-lg font-bold leading-solid">{{ editingAccountId() ? 'Editar cuenta' : 'Nueva cuenta' }}</h3>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h3 class="m-0 text-lg font-bold leading-solid">{{ editingAccountId() ? 'Editar cuenta' : 'Nueva cuenta' }}</h3>
+              @if (!editingAccountId()) {
+                <button
+                  class="rounded-md border border-line bg-app px-4 py-3 text-sm font-bold text-main transition duration-200 hover:border-primary hover:text-primary disabled:cursor-progress disabled:opacity-70"
+                  type="button"
+                  (click)="autofillExampleAccount()"
+                  [disabled]="accountLoading()"
+                >
+                  Autorellenar ejemplo
+                </button>
+              }
+            </div>
 
             <div class="grid gap-3 sm:grid-cols-2">
               <label class="grid gap-2 text-sm font-bold text-main">

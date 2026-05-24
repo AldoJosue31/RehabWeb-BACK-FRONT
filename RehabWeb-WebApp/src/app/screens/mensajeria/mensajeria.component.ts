@@ -2,10 +2,9 @@ import { Component, signal, ViewChild, ElementRef, ChangeDetectionStrategy, effe
 import { ReactiveFormsModule, FormControl } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { MensajeriaService } from '../../services/mensajeria.service';
 import { AuthRole, AuthService } from '../../services/auth.service';
-import { BackendContactInfo, BackendConversation, BackendMessage } from '../../models/mensajeria.models';
+import { BackendContactInfo, BackendConversation, BackendMessage, BackendVideoCall } from '../../models/mensajeria.models';
 import { interval, Subscription, startWith } from 'rxjs';
 
 interface UIMessage {
@@ -30,6 +29,34 @@ interface UIPatient {
   roleLabel: string;
 }
 
+interface JitsiMeetExternalApi {
+  dispose(): void;
+  addEventListener?(event: string, listener: (data: unknown) => void): void;
+  executeCommand?(command: string, ...args: unknown[]): void;
+}
+
+interface JitsiMeetExternalApiOptions {
+  roomName: string;
+  parentNode: HTMLElement;
+  width: string;
+  height: string;
+  lang: string;
+  jwt?: string;
+  userInfo: {
+    displayName: string;
+  };
+  configOverwrite: Record<string, unknown>;
+}
+
+declare global {
+  interface Window {
+    JitsiMeetExternalAPI?: new (
+      domain: string,
+      options: JitsiMeetExternalApiOptions,
+    ) => JitsiMeetExternalApi;
+  }
+}
+
 @Component({
   selector: 'app-mensajeria',
   standalone: true,
@@ -42,10 +69,13 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
   private mensajeriaService = inject(MensajeriaService);
   private authService = inject(AuthService);
   private router = inject(Router);
-  private sanitizer = inject(DomSanitizer);
   private pollingSubs: Subscription[] = [];
+  private jitsiApi: JitsiMeetExternalApi | null = null;
+  private jitsiApiScriptPromise: Promise<void> | null = null;
+  private jitsiApiScriptUrl: string | null = null;
 
   @ViewChild('chatContainer') chatContainer!: ElementRef;
+  @ViewChild('jitsiContainer') jitsiContainer?: ElementRef<HTMLDivElement>;
 
   currentUserId: number = 0;
   currentUserRole: AuthRole = 'terapeuta';
@@ -61,7 +91,8 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
   isLoadingOlder = signal<boolean>(false);
   imagePreviewUrl = signal<string | null>(null);
 
-  jitsiRoomUrl = signal<SafeResourceUrl | null>(null);
+  jitsiRoomName = signal<string | null>(null);
+  currentJitsiCall = signal<BackendVideoCall | null>(null);
   activeVideoCallId = signal<number | null>(null);
 
   conversations = signal<BackendConversation[]>([]);
@@ -176,6 +207,7 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.stopPolling();
+    this.disposeJitsiApi();
   }
 
   private iniciarPolling() {
@@ -217,7 +249,7 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
     const convId = parseInt(id);
     this.selectedConvId.set(convId);
     this.cargarMensajes(convId);
-    this.jitsiRoomUrl.set(null);
+    this.closeVideoRoom();
   }
 
    cargarMensajes(convId: number, before?: string, showLoading = true) {
@@ -246,9 +278,9 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
 
           const ultimoMsjVideo = mensajesVideo.length > 0 ? mensajesVideo[mensajesVideo.length - 1] : null;
 
-          if (ultimoMsjVideo && ultimoMsjVideo.encrypted_text === 'Videollamada finalizada' && this.jitsiRoomUrl() !== null) {
+          if (ultimoMsjVideo && ultimoMsjVideo.encrypted_text === 'Videollamada finalizada' && this.jitsiRoomName() !== null) {
               console.log("Cerrando sala automáticamente porque la otra parte colgó.");
-              this.jitsiRoomUrl.set(null);
+              this.closeVideoRoom();
               this.activeVideoCallId.set(null);
           }
         }
@@ -436,7 +468,7 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
     this.mensajeriaService.iniciarVideollamada(convId).subscribe({
       next: (res) => {
         this.activeVideoCallId.set(res.id);
-        this.openVideoRoom(res.room_id);
+        this.openVideoRoom(res);
       },
       error: (err) => {
         console.error('Error al generar sala de video:', err);
@@ -453,12 +485,22 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
       this.showError('No se encontro la sala de la videollamada.');
       return;
     }
-    this.openVideoRoom(roomId);
+    this.mensajeriaService.obtenerDatosVideollamada(roomId, this.selectedConvId() ?? undefined).subscribe({
+      next: (res) => {
+        this.activeVideoCallId.set(res.id);
+        this.openVideoRoom(res);
+      },
+      error: (err) => {
+        if (!this.handleAuthError(err)) {
+          this.showError('No se pudo obtener acceso a la videollamada activa.');
+        }
+      }
+    });
   }
 
   terminarVideollamada() {
     // Cerramos el iframe visualmente de inmediato
-    this.jitsiRoomUrl.set(null);
+    this.closeVideoRoom();
 
     const convId = this.selectedConvId();
     const callId = this.activeVideoCallId();
@@ -518,10 +560,116 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
     return /\.(png|jpe?g|gif|webp|bmp)$/i.test(url.split('?')[0]);
   }
 
-  private openVideoRoom(roomId: string) {
-    const botonesHabilitados = '["camera","microphone","desktop","fullscreen","settings"]';
-    const configuracionesExtras = 'config.disableDeepLinking=true&config.startWithAudioMuted=true&config.startWithVideoMuted=true&config.hideConferenceSubject=true';
-    const jitsiUrl = `https://meet.jit.si/RehabWeb-${roomId}#${configuracionesExtras}&config.toolbarButtons=${botonesHabilitados}`;
-    this.jitsiRoomUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(jitsiUrl));
+  private openVideoRoom(call: BackendVideoCall) {
+    if ((call.jitsi_domain === 'meet.jit.si' || call.jitsi_domain === '8x8.vc') && !call.jitsi_jwt) {
+      this.showError('Para iniciar automaticamente como anfitrion, configura Jitsi/JaaS con JWT en el backend.');
+      return;
+    }
+
+    const roomName = call.room_name || `RehabWeb-${call.room_id}`;
+    this.closeVideoRoom();
+    this.currentJitsiCall.set(call);
+    this.jitsiRoomName.set(roomName);
+    setTimeout(() => void this.mountJitsiRoom(call));
+  }
+
+  private closeVideoRoom(): void {
+    this.jitsiRoomName.set(null);
+    this.currentJitsiCall.set(null);
+    this.disposeJitsiApi();
+  }
+
+  private disposeJitsiApi(): void {
+    this.jitsiApi?.dispose();
+    this.jitsiApi = null;
+  }
+
+  private async mountJitsiRoom(call: BackendVideoCall): Promise<void> {
+    if (this.jitsiRoomName() !== call.room_name) return;
+
+    try {
+      await this.loadJitsiApiScript(call.jitsi_script_url);
+    } catch {
+      this.closeVideoRoom();
+      this.showError('No se pudo cargar Jitsi Meet. Revisa tu conexion e intenta nuevamente.');
+      return;
+    }
+
+    if (this.jitsiRoomName() !== call.room_name) return;
+
+    const parentNode = this.jitsiContainer?.nativeElement;
+    const JitsiMeetExternalAPI = typeof window !== 'undefined' ? window.JitsiMeetExternalAPI : undefined;
+    if (!parentNode || !JitsiMeetExternalAPI) {
+      this.closeVideoRoom();
+      this.showError('No se pudo abrir la videollamada.');
+      return;
+    }
+
+    const displayName = this.currentAccountDisplayName();
+    parentNode.innerHTML = '';
+    this.jitsiApi = new JitsiMeetExternalAPI(call.jitsi_domain, {
+      roomName: call.room_name,
+      parentNode,
+      width: '100%',
+      height: '100%',
+      lang: 'es',
+      ...(call.jitsi_jwt ? { jwt: call.jitsi_jwt } : {}),
+      userInfo: { displayName },
+      configOverwrite: {
+        disableDeepLinking: true,
+        hideConferenceSubject: true,
+        prejoinConfig: { enabled: false },
+        prejoinPageEnabled: false,
+        startWithAudioMuted: true,
+        startWithVideoMuted: true,
+        toolbarButtons: ['camera', 'microphone', 'desktop', 'fullscreen', 'settings'],
+      },
+    });
+
+    this.jitsiApi.addEventListener?.('videoConferenceJoined', () => {
+      this.jitsiApi?.executeCommand?.('displayName', displayName);
+    });
+  }
+
+  private loadJitsiApiScript(scriptUrl: string): Promise<void> {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return Promise.reject();
+    }
+
+    if (window.JitsiMeetExternalAPI && this.jitsiApiScriptUrl === scriptUrl) {
+      return Promise.resolve();
+    }
+
+    if (this.jitsiApiScriptPromise && this.jitsiApiScriptUrl === scriptUrl) {
+      return this.jitsiApiScriptPromise;
+    }
+
+    this.jitsiApiScriptUrl = scriptUrl;
+    this.jitsiApiScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = scriptUrl;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => {
+        this.jitsiApiScriptPromise = null;
+        this.jitsiApiScriptUrl = null;
+        reject();
+      };
+      document.body.appendChild(script);
+    });
+
+    return this.jitsiApiScriptPromise;
+  }
+
+  private currentAccountDisplayName(): string {
+    const convId = this.selectedConvId();
+    const conversation = this.conversations().find(conv => conv.id === convId);
+    const currentAccount = conversation
+      ? conversation.paciente === this.currentUserId
+        ? conversation.paciente_info
+        : conversation.terapeuta_info
+      : undefined;
+
+    return currentAccount?.nombre_completo?.trim() || this.currentUsername.trim() || 'Usuario RehabWeb';
   }
 }

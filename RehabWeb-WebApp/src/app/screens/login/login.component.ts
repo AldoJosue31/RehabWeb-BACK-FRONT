@@ -5,6 +5,123 @@ import { Router } from '@angular/router';
 import { AccountAdminRole, AccountAdminService, RoleAccount } from '../../services/account-admin.service';
 import { AuthRole, AuthService } from '../../services/auth.service';
 
+type ExampleAccount = Omit<Partial<RoleAccount>, 'id' | 'role' | 'username' | 'password'>;
+
+const EXAMPLE_ACCOUNTS: Record<AccountAdminRole, ExampleAccount[]> = {
+  terapeutas: [
+    {
+      nombre_completo: 'Dra. Valeria Mendoza',
+      email: 'valeria.mendoza@rehabweb.test',
+      especialidad: 'Fisioterapia neurologica',
+      numero_licencia: 'TER-1042',
+    },
+    {
+      nombre_completo: 'Dr. Mateo Herrera',
+      email: 'mateo.herrera@rehabweb.test',
+      especialidad: 'Rehabilitacion deportiva',
+      numero_licencia: 'TER-1187',
+    },
+    {
+      nombre_completo: 'Dra. Camila Torres',
+      email: 'camila.torres@rehabweb.test',
+      especialidad: 'Terapia ocupacional',
+      numero_licencia: 'TER-1264',
+    },
+    {
+      nombre_completo: 'Dr. Andres Salazar',
+      email: 'andres.salazar@rehabweb.test',
+      especialidad: 'Fisioterapia respiratoria',
+      numero_licencia: 'TER-1398',
+    },
+    {
+      nombre_completo: 'Dra. Sofia Rivas',
+      email: 'sofia.rivas@rehabweb.test',
+      especialidad: 'Rehabilitacion ortopedica',
+      numero_licencia: 'TER-1475',
+    },
+    {
+      nombre_completo: 'Dr. Diego Navarro',
+      email: 'diego.navarro@rehabweb.test',
+      especialidad: 'Medicina fisica y rehabilitacion',
+      numero_licencia: 'TER-1531',
+    },
+  ],
+  pacientes: [
+    {
+      nombre_completo: 'Lucia Fernandez',
+      email: 'lucia.fernandez@rehabweb.test',
+      fecha_nacimiento: '1992-04-18',
+      estado: 'activo',
+      estrategia_validacion: 'Dolor menor a 4/10 despues de la rutina',
+      estrategia_progreso: 'Aumentar repeticiones cada 2 semanas',
+      diagnostico_principal: 'Lesion de rodilla en rehabilitacion',
+      historial_medico: 'Esguince previo y dolor ocasional al subir escaleras.',
+      nivel_movilidad: 'medio',
+      restricciones: 'Evitar saltos y sentadillas profundas',
+    },
+    {
+      nombre_completo: 'Carlos Jimenez',
+      email: 'carlos.jimenez@rehabweb.test',
+      fecha_nacimiento: '1985-09-07',
+      estado: 'activo',
+      estrategia_validacion: 'Registrar fatiga y rango de movimiento',
+      estrategia_progreso: 'Incrementar resistencia con bandas elasticas',
+      diagnostico_principal: 'Recuperacion postoperatoria de hombro',
+      historial_medico: 'Cirugia artroscopica reciente sin complicaciones.',
+      nivel_movilidad: 'bajo',
+      restricciones: 'No cargar peso sobre el brazo derecho',
+    },
+    {
+      nombre_completo: 'Mariana Lopez',
+      email: 'mariana.lopez@rehabweb.test',
+      fecha_nacimiento: '1978-12-22',
+      estado: 'activo',
+      estrategia_validacion: 'Confirmar estabilidad durante marcha asistida',
+      estrategia_progreso: 'Reducir apoyo externo de forma gradual',
+      diagnostico_principal: 'Secuela de evento vascular cerebral',
+      historial_medico: 'Debilidad en hemicuerpo izquierdo y terapia previa.',
+      nivel_movilidad: 'dependiente',
+      restricciones: 'Supervision en ejercicios de equilibrio',
+    },
+    {
+      nombre_completo: 'Roberto Castro',
+      email: 'roberto.castro@rehabweb.test',
+      fecha_nacimiento: '1969-06-03',
+      estado: 'activo',
+      estrategia_validacion: 'Monitorear dolor lumbar antes y despues',
+      estrategia_progreso: 'Agregar movilidad toracica si no hay dolor',
+      diagnostico_principal: 'Lumbalgia mecanica cronica',
+      historial_medico: 'Trabajo sedentario y episodios recurrentes de dolor.',
+      nivel_movilidad: 'medio',
+      restricciones: 'Evitar flexion lumbar sostenida',
+    },
+    {
+      nombre_completo: 'Ana Paula Ortega',
+      email: 'ana.ortega@rehabweb.test',
+      fecha_nacimiento: '2001-01-29',
+      estado: 'activo',
+      estrategia_validacion: 'Controlar inflamacion despues de actividad',
+      estrategia_progreso: 'Pasar de movilidad activa a fortalecimiento',
+      diagnostico_principal: 'Tendinopatia de tobillo',
+      historial_medico: 'Dolor tras entrenamiento de carrera.',
+      nivel_movilidad: 'alto',
+      restricciones: 'Evitar carrera continua por ahora',
+    },
+    {
+      nombre_completo: 'Miguel Alvarez',
+      email: 'miguel.alvarez@rehabweb.test',
+      fecha_nacimiento: '1957-11-14',
+      estado: 'activo',
+      estrategia_validacion: 'Revisar tolerancia cardiopulmonar',
+      estrategia_progreso: 'Aumentar duracion de caminata controlada',
+      diagnostico_principal: 'Desacondicionamiento fisico',
+      historial_medico: 'Hipertension controlada con seguimiento medico.',
+      nivel_movilidad: 'bajo',
+      restricciones: 'Pausas frecuentes y evitar sobreesfuerzo',
+    },
+  ],
+};
+
 @Component({
   selector: 'app-login',
   standalone: true,
@@ -25,6 +142,7 @@ export class LoginComponent implements OnInit {
   accountRole = signal<AccountAdminRole>('terapeutas');
   accounts = signal<RoleAccount[]>([]);
   therapistOptions = signal<RoleAccount[]>([]);
+  knownUsernames = signal<string[]>([]);
   editingAccountId = signal<number | null>(null);
   accountLoading = signal(false);
   accountError = signal('');
@@ -111,6 +229,7 @@ export class LoginComponent implements OnInit {
     this.accountSuccess.set('');
     this.resetAccountForm();
     this.loadAccounts();
+    this.loadKnownUsernames();
     if (role === 'pacientes') {
       this.loadTherapists();
     }
@@ -164,6 +283,7 @@ export class LoginComponent implements OnInit {
         this.accountSuccess.set(this.editingAccountId() ? 'Cuenta actualizada.' : 'Cuenta creada.');
         this.resetAccountForm();
         this.loadAccounts();
+        this.loadKnownUsernames();
         if (role === 'terapeutas') {
           this.loadTherapists();
         }
@@ -184,6 +304,7 @@ export class LoginComponent implements OnInit {
       next: () => {
         this.accountSuccess.set('Cuenta eliminada.');
         this.loadAccounts();
+        this.loadKnownUsernames();
         if (this.editingAccountId() === account.id) {
           this.resetAccountForm();
         }
@@ -213,6 +334,33 @@ export class LoginComponent implements OnInit {
     });
   }
 
+  autofillExampleAccount(): void {
+    const username = this.nextAvailableUsername();
+    const sample = this.nextExampleAccount(username);
+    const therapist = this.therapistOptions()[0];
+
+    this.editingAccountId.set(null);
+    this.accountError.set('');
+    this.accountSuccess.set('');
+    this.accountForm.patchValue({
+      username,
+      password: '123456',
+      email: this.exampleEmail(sample.email, username),
+      nombre_completo: sample.nombre_completo ?? '',
+      especialidad: sample.especialidad ?? 'Fisioterapia',
+      numero_licencia: this.exampleLicense(sample.numero_licencia, username),
+      terapeuta_id: this.accountRole() === 'pacientes' && therapist ? therapist.id.toString() : '',
+      fecha_nacimiento: sample.fecha_nacimiento ?? '',
+      estado: sample.estado ?? 'activo',
+      estrategia_validacion: sample.estrategia_validacion ?? 'Libre',
+      estrategia_progreso: sample.estrategia_progreso ?? 'Por rutinas',
+      diagnostico_principal: sample.diagnostico_principal ?? '',
+      historial_medico: sample.historial_medico ?? '',
+      nivel_movilidad: sample.nivel_movilidad ?? 'medio',
+      restricciones: sample.restricciones ?? '',
+    });
+  }
+
   private loadAccounts(): void {
     this.accountLoading.set(true);
     this.accountAdminService.list(this.accountRole()).subscribe({
@@ -232,6 +380,69 @@ export class LoginComponent implements OnInit {
       next: (accounts) => this.therapistOptions.set(accounts),
       error: () => this.therapistOptions.set([]),
     });
+  }
+
+  private loadKnownUsernames(): void {
+    const usernames: string[] = [];
+    let pendingRequests = 2;
+
+    const finish = () => {
+      pendingRequests -= 1;
+      if (pendingRequests === 0) {
+        this.knownUsernames.set(usernames.length ? usernames : this.accounts().map((account) => account.username));
+      }
+    };
+
+    this.accountAdminService.list('terapeutas').subscribe({
+      next: (accounts) => usernames.push(...accounts.map((account) => account.username)),
+      error: finish,
+      complete: finish,
+    });
+
+    this.accountAdminService.list('pacientes').subscribe({
+      next: (accounts) => usernames.push(...accounts.map((account) => account.username)),
+      error: finish,
+      complete: finish,
+    });
+  }
+
+  private nextAvailableUsername(): string {
+    const occupied = new Set([
+      ...this.knownUsernames(),
+      ...this.accounts().map((account) => account.username),
+      ...this.therapistOptions().map((account) => account.username),
+    ].map((username) => username.toLowerCase()));
+
+    let index = 1;
+    while (occupied.has(`user${index}`)) {
+      index += 1;
+    }
+
+    return `user${index}`;
+  }
+
+  private nextExampleAccount(username: string): ExampleAccount {
+    const examples = EXAMPLE_ACCOUNTS[this.accountRole()];
+    const index = Number(username.replace('user', '')) - 1;
+    return examples[index % examples.length];
+  }
+
+  private exampleEmail(email: string | undefined, username: string): string {
+    if (!email) {
+      return `${username}@rehabweb.test`;
+    }
+
+    const domain = email.split('@')[1] ?? 'rehabweb.test';
+    return `${username}@${domain}`;
+  }
+
+  private exampleLicense(license: string | undefined, username: string): string {
+    if (this.accountRole() !== 'terapeutas') {
+      return '';
+    }
+
+    const index = username.replace('user', '').padStart(4, '0');
+    return license ? `${license}-${index}` : `TER-${index}`;
   }
 
   private accountPayload(): Partial<RoleAccount> {

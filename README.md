@@ -78,6 +78,21 @@ npm start
 
 El frontend usa `/api` y `/media` con `proxy.conf.json` hacia `http://localhost:8000`.
 
+## Jitsi como anfitrion automatico
+
+`meet.jit.si` requiere que el primer usuario autentique una cuenta externa para crear la sala. Para que RehabWeb inicie automaticamente al terapeuta como anfitrion, configura Jitsi as a Service o un servidor Jitsi propio con JWT en `.env`:
+
+```text
+JITSI_DOMAIN=8x8.vc
+JITSI_APP_ID=tu-app-id
+JITSI_KID=tu-app-id/tu-key-id
+JITSI_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+JITSI_JWT_ISSUER=chat
+JITSI_JWT_TTL_SECONDS=7200
+```
+
+Con esas variables, el backend firma la entrada del terapeuta como moderador y la del paciente como participante.
+
 ## Publicar como repositorio nuevo
 
 ```bash

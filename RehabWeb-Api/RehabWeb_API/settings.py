@@ -220,3 +220,11 @@ CSRF_TRUSTED_ORIGINS = os.getenv(
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'rehabweb@localhost'
+
+# Jitsi/JaaS
+JITSI_DOMAIN = os.getenv('JITSI_DOMAIN', 'meet.jit.si')
+JITSI_APP_ID = os.getenv('JITSI_APP_ID', '')
+JITSI_KID = os.getenv('JITSI_KID', '')
+JITSI_PRIVATE_KEY = os.getenv('JITSI_PRIVATE_KEY', '')
+JITSI_JWT_ISSUER = os.getenv('JITSI_JWT_ISSUER', 'chat')
+JITSI_JWT_TTL_SECONDS = int(os.getenv('JITSI_JWT_TTL_SECONDS', '7200'))

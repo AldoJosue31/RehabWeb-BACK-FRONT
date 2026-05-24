@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Conversation, Message, VideoCall
 from RehabWeb_API.models import PacienteProfile, TerapeutaProfile
+from .jitsi import build_jitsi_jwt, jitsi_room_name, jitsi_script_url
 from RehabWeb_API.roles import (
     ROLE_PACIENTE,
     ROLE_TERAPEUTA,
@@ -144,14 +145,44 @@ class ConversationSerializer(serializers.ModelSerializer):
 class VideoCallSerializer(serializers.ModelSerializer):
     duration_minutes = serializers.ReadOnlyField()
     join_url = serializers.SerializerMethodField()
+    room_name = serializers.SerializerMethodField()
+    jitsi_domain = serializers.SerializerMethodField()
+    jitsi_script_url = serializers.SerializerMethodField()
+    jitsi_jwt = serializers.SerializerMethodField()
+    is_moderator = serializers.SerializerMethodField()
 
     class Meta:
         model = VideoCall
         fields = [
             'id', 'room_id', 'conversation', 'initiator', 
-            'created_at', 'started_at', 'ended_at', 'status', 'duration_minutes', 'join_url'
+            'created_at', 'started_at', 'ended_at', 'status', 'duration_minutes', 'join_url',
+            'room_name', 'jitsi_domain', 'jitsi_script_url', 'jitsi_jwt', 'is_moderator'
         ]
         read_only_fields = ['id', 'room_id', 'initiator', 'created_at']
 
     def get_join_url(self, obj):
-        return f'https://meet.jit.si/RehabWeb-{obj.room_id}'
+        return f'https://{self.get_jitsi_domain(obj)}/{self.get_room_name(obj)}'
+
+    def get_room_name(self, obj):
+        return jitsi_room_name(obj)
+
+    def get_jitsi_domain(self, obj):
+        from django.conf import settings
+        return settings.JITSI_DOMAIN
+
+    def get_jitsi_script_url(self, obj):
+        return jitsi_script_url()
+
+    def get_jitsi_jwt(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return None
+        return build_jitsi_jwt(obj, request)
+
+    def get_is_moderator(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return False
+
+        selected_role = get_request_role(request)
+        return selected_role == ROLE_TERAPEUTA and request.user == obj.conversation.terapeuta

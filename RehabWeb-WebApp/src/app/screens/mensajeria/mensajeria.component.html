@@ -63,7 +63,7 @@
       </div>
 
       <div class="flex items-center">
-        @if(currentUserRole === 'terapeuta' && !jitsiRoomUrl()) {
+        @if(currentUserRole === 'terapeuta' && !jitsiRoomName()) {
           <button
             class="flex items-center gap-2 rounded-full border border-primary bg-primary-low px-4 py-2 text-sm font-medium text-primary transition duration-200 hover:bg-primary hover:text-white max-md:px-3"
             (click)="iniciarVideollamada()"
@@ -78,13 +78,9 @@
       </div>
     </header>
 
-    @if(jitsiRoomUrl()) {
+    @if(jitsiRoomName()) {
       <div class="flex grow flex-col bg-nav">
-        <iframe
-          class="w-full grow border-0"
-          [src]="jitsiRoomUrl()"
-          allow="camera; microphone; fullscreen; display-capture"
-        ></iframe>
+        <div #jitsiContainer class="w-full grow"></div>
 
         <div class="flex justify-center bg-main/40 p-4">
           <button

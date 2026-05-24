@@ -116,14 +116,20 @@ class VideoCallViewSet(viewsets.ModelViewSet):
         # Solo puedes ver las llamadas de las que eres parte
         user = self.request.user
         selected_role = get_request_role(self.request)
+        conversation_id = self.request.query_params.get('conversation')
         if selected_role == ROLE_PACIENTE:
-            return VideoCall.objects.filter(conversation__paciente=user)
-        if selected_role == ROLE_TERAPEUTA:
-            return VideoCall.objects.filter(conversation__terapeuta=user)
+            queryset = VideoCall.objects.filter(conversation__paciente=user)
+        elif selected_role == ROLE_TERAPEUTA:
+            queryset = VideoCall.objects.filter(conversation__terapeuta=user)
+        else:
+            queryset = VideoCall.objects.filter(
+                Q(conversation__paciente=user) | Q(conversation__terapeuta=user)
+            )
 
-        return VideoCall.objects.filter(
-            Q(conversation__paciente=user) | Q(conversation__terapeuta=user)
-        )
+        if conversation_id:
+            queryset = queryset.filter(conversation_id=conversation_id)
+
+        return queryset.select_related('conversation', 'conversation__paciente', 'conversation__terapeuta', 'initiator')
 
     @action(detail=False, methods=['post'])
     def iniciar_llamada(self, request):
@@ -174,6 +180,37 @@ class VideoCallViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(nueva_llamada)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'])
+    def datos_sala(self, request):
+        room_id = request.data.get('room_id')
+        conversation_id = request.data.get('conversation_id')
+
+        if not room_id and not conversation_id:
+            return Response(
+                {"error": "Debe proporcionar room_id o conversation_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = self.get_queryset().filter(status='activa')
+        if room_id:
+            queryset = queryset.filter(room_id=room_id)
+        if conversation_id:
+            queryset = queryset.filter(conversation_id=conversation_id)
+
+        llamada = queryset.order_by('-created_at').first()
+        if not llamada:
+            return Response(
+                {"error": "No se encontro una videollamada activa para esta sala."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        selected_role = get_request_role(request)
+        if selected_role and not user_matches_conversation_role(request.user, llamada.conversation, selected_role):
+            return Response({"error": "El rol seleccionado no participa en esta conversacion."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = self.get_serializer(llamada)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def finalizar_llamada(self, request, pk=None):
