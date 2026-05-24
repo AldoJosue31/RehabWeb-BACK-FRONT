@@ -21,7 +21,7 @@ interface NavItem {
   template: `
     <div class="flex min-h-dvh bg-app font-sans text-main">
       <aside
-        class="sticky top-0 hidden h-dvh shrink-0 border-r border-line bg-surface transition-all duration-[var(--baseline-motion-medium)] ease-[var(--baseline-motion-ease)] lg:flex lg:flex-col"
+        class="sticky top-0 z-30 hidden h-dvh shrink-0 overflow-visible border-r border-line bg-surface transition-all duration-[var(--baseline-motion-medium)] ease-[var(--baseline-motion-ease)] lg:flex lg:flex-col"
         [ngClass]="collapsed() ? 'w-[88px]' : 'w-[260px]'"
       >
         <div class="flex h-[76px] items-center gap-3 border-b border-line px-5">
@@ -36,7 +36,7 @@ interface NavItem {
         </div>
 
         <button
-          class="absolute -right-5 top-[66px] z-30 grid h-10 w-10 place-items-center rounded-full border border-line bg-surface text-secondary shadow-md transition duration-[var(--baseline-motion-medium)] hover:border-primary hover:text-primary"
+          class="absolute -right-5 top-[66px] z-50 grid h-10 w-10 cursor-pointer place-items-center rounded-full border border-line bg-surface text-secondary shadow-md transition duration-[var(--baseline-motion-medium)] hover:border-primary hover:text-primary"
           type="button"
           (click)="toggleCollapsed()"
           [attr.aria-label]="collapsed() ? 'Expandir menu' : 'Contraer menu'"
@@ -46,7 +46,7 @@ interface NavItem {
           </svg>
         </button>
 
-        <nav class="flex grow flex-col gap-7 overflow-y-auto px-4 py-6">
+        <nav class="flex grow flex-col gap-7 overflow-x-hidden overflow-y-auto px-4 py-6">
           <section>
             @if (!collapsed()) {
               <p class="mb-3 px-2 text-xs font-bold uppercase tracking-wide text-muted">Main menu</p>
@@ -145,24 +145,86 @@ interface NavItem {
 
         @if (mobileMenuOpen()) {
           <div class="fixed inset-0 z-40 bg-nav/35 lg:hidden" (click)="toggleMobileMenu()"></div>
-          <aside class="fixed inset-y-0 left-0 z-50 flex w-[290px] flex-col border-r border-line bg-surface p-4 shadow-lg lg:hidden">
-            <div class="mb-5 flex items-center justify-between">
-              <strong class="text-lg font-bold text-nav">Menu</strong>
-              <button class="rounded-md border border-line px-3 py-2 text-sm font-bold text-secondary" type="button" (click)="toggleMobileMenu()">Cerrar</button>
+          <aside class="fixed inset-y-0 left-0 z-50 flex h-dvh w-full max-w-[340px] flex-col overflow-hidden border-r border-line bg-surface shadow-lg sm:max-w-[360px] lg:hidden">
+            <div class="flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-line px-4 sm:px-5">
+              <div class="flex min-w-0 items-center gap-3">
+                <span class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-primary text-white shadow-sm">
+                  <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 12h3l2-5 4 10 2-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+                <strong class="truncate text-base font-bold leading-solid text-nav">PhysioMetrics</strong>
+              </div>
+              <button class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-line text-secondary shadow-sm hover:border-primary hover:text-primary" type="button" (click)="toggleMobileMenu()" aria-label="Cerrar menu">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </button>
             </div>
-            <div class="grid gap-1">
-              @for (item of allNav(); track item.path) {
-                <a
-                  class="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-secondary transition duration-200 hover:bg-primary-low hover:text-primary"
-                  [routerLink]="item.path"
-                  routerLinkActive="bg-primary-low text-primary"
-                  [routerLinkActiveOptions]="{ exact: true }"
-                  (click)="toggleMobileMenu()"
-                >
-                  <ng-container [ngTemplateOutlet]="iconTemplate" [ngTemplateOutletContext]="{ icon: item.icon }"></ng-container>
-                  <span>{{ item.label }}</span>
-                </a>
-              }
+
+            <nav class="flex min-h-0 grow flex-col gap-7 overflow-x-hidden overflow-y-auto px-4 py-6">
+              <section>
+                <p class="mb-3 px-2 text-xs font-bold uppercase tracking-wide text-muted">Main menu</p>
+                <div class="grid gap-1">
+                  @for (item of mainNav(); track item.path) {
+                    <a
+                      class="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-secondary transition duration-200 hover:bg-primary-low hover:text-primary"
+                      [routerLink]="item.path"
+                      routerLinkActive="bg-primary-low text-primary"
+                      [routerLinkActiveOptions]="{ exact: true }"
+                      (click)="closeMobileMenu()"
+                    >
+                      <span class="shrink-0">
+                        <ng-container [ngTemplateOutlet]="iconTemplate" [ngTemplateOutletContext]="{ icon: item.icon }"></ng-container>
+                      </span>
+                      <span class="min-w-0 truncate">{{ item.label }}</span>
+                    </a>
+                  }
+                </div>
+              </section>
+
+              <section>
+                <p class="mb-3 px-2 text-xs font-bold uppercase tracking-wide text-muted">Settings</p>
+                <div class="grid gap-1">
+                  @for (item of settingsNav(); track item.path) {
+                    <a
+                      class="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-secondary transition duration-200 hover:bg-primary-low hover:text-primary"
+                      [routerLink]="item.path"
+                      routerLinkActive="bg-primary-low text-primary"
+                      [routerLinkActiveOptions]="{ exact: true }"
+                      (click)="closeMobileMenu()"
+                    >
+                      <span class="shrink-0">
+                        <ng-container [ngTemplateOutlet]="iconTemplate" [ngTemplateOutletContext]="{ icon: item.icon }"></ng-container>
+                      </span>
+                      <span class="min-w-0 truncate">{{ item.label }}</span>
+                    </a>
+                  }
+
+                  <button
+                    class="flex min-h-11 items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-secondary transition duration-200 hover:bg-danger-bg hover:text-danger"
+                    type="button"
+                    (click)="logout()"
+                  >
+                    <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M10 17l5-5-5-5M15 12H3M21 4v16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span>Cerrar sesiÃ³n</span>
+                  </button>
+                </div>
+              </section>
+            </nav>
+
+            <div class="shrink-0 border-t border-line p-4">
+              <div class="flex items-center gap-3">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-low text-sm font-bold text-primary">
+                  {{ initials() }}
+                </span>
+                <div class="min-w-0">
+                  <p class="m-0 truncate text-sm font-bold leading-solid text-main">{{ displayName() }}</p>
+                  <p class="m-0 truncate text-xs leading-default text-secondary">{{ roleLabel() }}</p>
+                </div>
+              </div>
             </div>
           </aside>
         }
@@ -257,7 +319,12 @@ export class AppShellComponent implements OnInit {
     this.mobileMenuOpen.update((value) => !value);
   }
 
+  closeMobileMenu(): void {
+    this.mobileMenuOpen.set(false);
+  }
+
   logout(): void {
+    this.closeMobileMenu();
     this.authService.logout();
     void this.router.navigateByUrl('/login');
   }
