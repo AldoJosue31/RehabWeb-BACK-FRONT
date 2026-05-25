@@ -2,11 +2,11 @@
   "/api": {
     "target": "http://backend:8000",
     "secure": false,
-    "changeOrigin": false
+    "changeOrigin": true
   },
   "/media": {
     "target": "http://backend:8000",
     "secure": false,
-    "changeOrigin": false
+    "changeOrigin": true
   }
 }

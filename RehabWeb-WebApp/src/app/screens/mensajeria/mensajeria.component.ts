@@ -50,6 +50,8 @@ interface JitsiMeetExternalApiOptions {
   configOverwrite: Record<string, unknown>;
 }
 
+type VideoPermissionState = 'idle' | 'checking' | 'granted' | 'blocked';
+
 declare global {
   interface Window {
     JitsiMeetExternalAPI?: new (
@@ -96,6 +98,7 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
   jitsiRoomName = signal<string | null>(null);
   currentJitsiCall = signal<BackendVideoCall | null>(null);
   activeVideoCallId = signal<number | null>(null);
+  videoPermissionState = signal<VideoPermissionState>('idle');
 
   conversations = signal<BackendConversation[]>([]);
   messages = signal<BackendMessage[]>([]);
@@ -513,12 +516,14 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
 
   removeFile() { this.selectedFile.set(null); }
 
-  iniciarVideollamada() {
+  async iniciarVideollamada() {
     const convId = this.selectedConvId();
     if (!convId) {
       this.showError('Selecciona un chat primero.');
       return;
     }
+
+    if (!(await this.ensureVideoPermissions())) return;
 
     this.mensajeriaService.iniciarVideollamada(convId).subscribe({
       next: (res) => {
@@ -534,12 +539,15 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
     });
   }
 
-  unirseVideollamada(messageText: string) {
+  async unirseVideollamada(messageText: string) {
     const roomId = messageText.split('Sala:')[1]?.trim();
     if (!roomId) {
       this.showError('No se encontro la sala de la videollamada.');
       return;
     }
+
+    if (!(await this.ensureVideoPermissions())) return;
+
     this.mensajeriaService.obtenerDatosVideollamada(roomId, this.selectedConvId() ?? undefined).subscribe({
       next: (res) => {
         this.activeVideoCallId.set(res.id);
@@ -615,6 +623,59 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
     return /\.(png|jpe?g|gif|webp|bmp)$/i.test(url.split('?')[0]);
   }
 
+  private async ensureVideoPermissions(): Promise<boolean> {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      this.showError('No se puede abrir la camara desde este entorno.');
+      return false;
+    }
+
+    if (!window.isSecureContext) {
+      this.videoPermissionState.set('blocked');
+      this.showError('Para usar camara y microfono desde movil, abre la app con HTTPS: https://IP_DE_ESTA_PC:4200');
+      return false;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.videoPermissionState.set('blocked');
+      this.showError('Este navegador no permite solicitar camara y microfono en esta conexion.');
+      return false;
+    }
+
+    this.videoPermissionState.set('checking');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+      stream.getTracks().forEach((track) => track.stop());
+      this.videoPermissionState.set('granted');
+      return true;
+    } catch (error) {
+      this.videoPermissionState.set('blocked');
+      this.showError(this.mediaPermissionErrorMessage(error));
+      return false;
+    }
+  }
+
+  private mediaPermissionErrorMessage(error: unknown): string {
+    const name = error instanceof DOMException ? error.name : '';
+
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+      return 'Permite el acceso a camara y microfono para unirte a la videollamada.';
+    }
+
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+      return 'No se detecto camara o microfono en este dispositivo.';
+    }
+
+    if (name === 'NotReadableError' || name === 'TrackStartError') {
+      return 'La camara o el microfono estan siendo usados por otra aplicacion.';
+    }
+
+    return 'No se pudo acceder a camara y microfono. Revisa permisos del navegador.';
+  }
+
   private openVideoRoom(call: BackendVideoCall) {
     if ((call.jitsi_domain === 'meet.jit.si' || call.jitsi_domain === '8x8.vc') && !call.jitsi_jwt) {
       this.showError('Para iniciar automaticamente como anfitrion, configura Jitsi/JaaS con JWT en el backend.');
@@ -675,8 +736,8 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
         hideConferenceSubject: true,
         prejoinConfig: { enabled: false },
         prejoinPageEnabled: false,
-        startWithAudioMuted: true,
-        startWithVideoMuted: true,
+        startWithAudioMuted: false,
+        startWithVideoMuted: false,
         toolbarButtons: ['camera', 'microphone', 'desktop', 'fullscreen', 'settings'],
       },
     });

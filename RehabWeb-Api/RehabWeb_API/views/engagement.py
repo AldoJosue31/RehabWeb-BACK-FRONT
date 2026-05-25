@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -6,18 +7,70 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from RehabWeb_API.models import Alert, ExerciseSession, MotivationProfile, PatientBadge, WeeklySummary
+from RehabWeb_API.models import (
+    Alert,
+    Exercise,
+    ExerciseSession,
+    MotivationProfile,
+    Notification,
+    PatientBadge,
+    Routine,
+    RoutineAssignment,
+    WeeklySummary,
+)
 from RehabWeb_API.permissions import HasSelectedRole
 from RehabWeb_API.roles import ROLE_PACIENTE, ROLE_TERAPEUTA, get_request_role
 from RehabWeb_API.serializers import (
     AlertSerializer,
+    ExerciseSerializer,
     ExerciseSessionSerializer,
     LeaderboardEntrySerializer,
     MotivationProfileSerializer,
+    NotificationSerializer,
     PatientBadgeSerializer,
+    RoutineAssignmentSerializer,
+    RoutineSerializer,
     WeeklySummarySerializer,
 )
-from RehabWeb_API.services import build_weekly_summary, detect_inactivity_alerts, leaderboard_top10
+from RehabWeb_API.services import (
+    build_weekly_summary,
+    compatible_exercises_for_patient,
+    detect_inactivity_alerts,
+    leaderboard_top10,
+    refresh_assignment_status,
+    therapist_for_patient,
+)
+
+
+class ExerciseViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = ExerciseSerializer
+    permission_classes = [permissions.IsAuthenticated, HasSelectedRole]
+
+    def get_queryset(self):
+        patient_id = self.request.query_params.get('paciente')
+        queryset = Exercise.objects.filter(active=True)
+        if not patient_id:
+            return queryset
+
+        patient = get_object_or_404(User, pk=patient_id)
+        selected_role = get_request_role(self.request)
+        if selected_role == ROLE_PACIENTE and patient != self.request.user:
+            return Exercise.objects.none()
+        if selected_role == ROLE_TERAPEUTA:
+            therapist = therapist_for_patient(patient)
+            if therapist and therapist != self.request.user:
+                return Exercise.objects.none()
+
+        compatible_ids = [exercise.id for exercise in compatible_exercises_for_patient(patient)]
+        return queryset.filter(id__in=compatible_ids)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        patient_id = self.request.query_params.get('paciente')
+        if patient_id:
+            patient = get_object_or_404(User, pk=patient_id)
+            context['compatible_ids'] = {str(exercise.id) for exercise in compatible_exercises_for_patient(patient)}
+        return context
 
 
 class AlertViewSet(viewsets.ReadOnlyModelViewSet):
@@ -83,6 +136,84 @@ class ExerciseSessionViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         context['role'] = get_request_role(self.request)
         return context
+
+
+class RoutineViewSet(viewsets.ModelViewSet):
+    serializer_class = RoutineSerializer
+    permission_classes = [permissions.IsAuthenticated, HasSelectedRole]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        user = self.request.user
+        selected_role = get_request_role(self.request)
+        queryset = Routine.objects.select_related('paciente', 'terapeuta').prefetch_related('items__exercise')
+        if selected_role == ROLE_PACIENTE:
+            return queryset.filter(paciente=user)
+        if selected_role == ROLE_TERAPEUTA:
+            return queryset.filter(terapeuta=user)
+        return queryset.filter(Q(paciente=user) | Q(terapeuta=user))
+
+    def create(self, request, *args, **kwargs):
+        if get_request_role(request) != ROLE_TERAPEUTA:
+            return Response({'error': 'Solo terapeutas pueden crear rutinas.'}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        warnings = serializer.clinical_warnings()
+        if warnings and not serializer.validated_data.get('override_warnings'):
+            return Response(
+                {
+                    'requires_confirmation': True,
+                    'warnings': warnings,
+                    'detail': 'Confirma la creacion si deseas continuar con estos riesgos.',
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+class RoutineAssignmentViewSet(viewsets.ModelViewSet):
+    serializer_class = RoutineAssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated, HasSelectedRole]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
+
+    def get_queryset(self):
+        user = self.request.user
+        selected_role = get_request_role(self.request)
+        queryset = RoutineAssignment.objects.select_related('routine', 'paciente', 'terapeuta').prefetch_related('routine__items__exercise')
+        if selected_role == ROLE_PACIENTE:
+            assignments = queryset.filter(paciente=user)
+        elif selected_role == ROLE_TERAPEUTA:
+            assignments = queryset.filter(terapeuta=user)
+        else:
+            assignments = queryset.filter(Q(paciente=user) | Q(terapeuta=user))
+
+        for assignment in assignments:
+            refresh_assignment_status(assignment)
+        return assignments
+
+    def create(self, request, *args, **kwargs):
+        if get_request_role(request) != ROLE_TERAPEUTA:
+            return Response({'error': 'Solo terapeutas pueden asignar rutinas.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated, HasSelectedRole]
+
+    def get_queryset(self):
+        return Notification.objects.filter(recipient=self.request.user)
+
+    @action(detail=True, methods=['patch'])
+    def marcar_leida(self, request, pk=None):
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save(update_fields=['is_read'])
+        return Response(self.get_serializer(notification).data)
 
 
 class MotivationProfileView(APIView):

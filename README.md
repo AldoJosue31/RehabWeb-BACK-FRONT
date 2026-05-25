@@ -29,9 +29,12 @@ Monorepo para ejecutar RehabWeb con Docker:
 
 3. Abre la app:
 
-   - Frontend: http://localhost:4201
+   - Frontend en esta maquina: https://localhost:4200
+   - Frontend desde otra maquina en la misma red: `https://IP_DE_ESTA_PC:4200`
    - Backend: http://localhost:8000
    - Admin Django: http://localhost:8000/admin
+
+   Nota: no uses la IP interna del contenedor, por ejemplo `172.18.0.4`, desde el navegador del host. Esa IP pertenece a la red bridge de Docker y puede cambiar; Docker publica el frontend hacia tu maquina por el puerto `4200`. Para camara y microfono desde movil usa HTTPS y acepta el certificado local del entorno de desarrollo.
 
 ## Crear superusuario
 

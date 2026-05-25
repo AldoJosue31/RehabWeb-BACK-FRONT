@@ -1,20 +1,37 @@
 from django.contrib.auth.models import Group, User
+from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 from mensajeria.models import Conversation
 from RehabWeb_API.models import (
     Alert,
+    Exercise,
     ExerciseSession,
     MotivationProfile,
+    Notification,
     PacienteProfile,
     PatientBadge,
     PerfilClinico,
+    Routine,
+    RoutineAssignment,
+    RoutineExercise,
+    RoutineTemplate,
     TerapeutaProfile,
     WeeklySummary,
 )
 from RehabWeb_API.roles import ROLE_PACIENTE, ROLE_TERAPEUTA
-from RehabWeb_API.services import finalize_session_metrics, is_minor, reset_expired_streak, therapist_for_patient
+from RehabWeb_API.services import (
+    create_assignment_notification,
+    estimate_routine_duration,
+    finalize_session_metrics,
+    is_minor,
+    patient_has_initial_evaluation,
+    refresh_assignment_status,
+    reset_expired_streak,
+    therapist_for_patient,
+    validate_routine_for_patient,
+)
 
 
 ROLE_GROUPS = {
@@ -43,6 +60,7 @@ class AccountSerializer(serializers.Serializer):
     historial_medico = serializers.CharField(required=False, allow_blank=True)
     nivel_movilidad = serializers.ChoiceField(choices=PerfilClinico.NIVEL_MOVILIDAD_CHOICES, required=False)
     restricciones = serializers.CharField(required=False, allow_blank=True)
+    evaluacion_inicial_registrada = serializers.BooleanField(required=False)
     total_points = serializers.IntegerField(read_only=True)
     current_streak = serializers.IntegerField(read_only=True)
     best_streak = serializers.IntegerField(read_only=True)
@@ -97,6 +115,19 @@ class AccountSerializer(serializers.Serializer):
             profile = getattr(instance, 'perfil_paciente', None)
             perfil_clinico = profile.perfil_clinico if profile else None
             motivation = getattr(instance, 'motivacion', None)
+            has_initial_evaluation = False
+            if perfil_clinico:
+                diagnosis = (perfil_clinico.diagnostico_principal or '').strip().lower()
+                has_initial_evaluation = bool(
+                    diagnosis
+                    and diagnosis != 'sin diagnostico registrado'
+                    and (
+                        perfil_clinico.evaluacion_inicial_registrada
+                        or perfil_clinico.historial_medico
+                        or perfil_clinico.restricciones
+                        or perfil_clinico.nivel_movilidad
+                    )
+                )
             data.update({
                 'terapeuta_id': profile.terapeuta.usuario_id if profile and profile.terapeuta else None,
                 'fecha_nacimiento': profile.fecha_nacimiento if profile else None,
@@ -107,6 +138,7 @@ class AccountSerializer(serializers.Serializer):
                 'historial_medico': perfil_clinico.historial_medico if perfil_clinico else '',
                 'nivel_movilidad': perfil_clinico.nivel_movilidad if perfil_clinico else 'medio',
                 'restricciones': perfil_clinico.restricciones if perfil_clinico else '',
+                'evaluacion_inicial_registrada': has_initial_evaluation,
                 'total_points': motivation.total_points if motivation else 0,
                 'current_streak': motivation.current_streak if motivation else 0,
                 'best_streak': motivation.best_streak if motivation else 0,
@@ -176,6 +208,10 @@ class AccountSerializer(serializers.Serializer):
             perfil_clinico.historial_medico = data.get('historial_medico', perfil_clinico.historial_medico)
             perfil_clinico.nivel_movilidad = data.get('nivel_movilidad', perfil_clinico.nivel_movilidad)
             perfil_clinico.restricciones = data.get('restricciones', perfil_clinico.restricciones)
+            perfil_clinico.evaluacion_inicial_registrada = data.get(
+                'evaluacion_inicial_registrada',
+                perfil_clinico.evaluacion_inicial_registrada,
+            )
             perfil_clinico.save()
         else:
             perfil_clinico = PerfilClinico.objects.create(
@@ -183,6 +219,7 @@ class AccountSerializer(serializers.Serializer):
                 historial_medico=data.get('historial_medico', ''),
                 nivel_movilidad=data.get('nivel_movilidad', 'medio'),
                 restricciones=data.get('restricciones', ''),
+                evaluacion_inicial_registrada=data.get('evaluacion_inicial_registrada', bool(data.get('diagnostico_principal'))),
             )
 
         PacienteProfile.objects.update_or_create(
@@ -341,6 +378,298 @@ class ExerciseSessionSerializer(serializers.ModelSerializer):
         validated_data['terapeuta'] = therapist_for_patient(patient)
         session = ExerciseSession.objects.create(**validated_data)
         return finalize_session_metrics(session)
+
+
+class ExerciseSerializer(serializers.ModelSerializer):
+    compatible = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Exercise
+        fields = [
+            'id',
+            'name',
+            'description',
+            'category',
+            'compatible_diagnoses',
+            'contraindications',
+            'min_mobility_level',
+            'default_sets',
+            'default_repetitions',
+            'default_rest_seconds',
+            'default_duration_seconds',
+            'active',
+            'compatible',
+        ]
+
+    def get_compatible(self, obj):
+        compatible_ids = self.context.get('compatible_ids')
+        return str(obj.id) in compatible_ids if compatible_ids is not None else True
+
+
+class RoutineExerciseSerializer(serializers.ModelSerializer):
+    exercise = ExerciseSerializer(read_only=True)
+    exercise_id = serializers.UUIDField(write_only=True)
+
+    class Meta:
+        model = RoutineExercise
+        fields = [
+            'id',
+            'exercise',
+            'exercise_id',
+            'order',
+            'sets',
+            'repetitions',
+            'rest_seconds',
+            'duration_seconds',
+            'notes',
+        ]
+
+    def validate_exercise_id(self, value):
+        if not Exercise.objects.filter(id=value, active=True).exists():
+            raise serializers.ValidationError('El ejercicio seleccionado no existe o esta inactivo.')
+        return value
+
+
+class RoutineTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RoutineTemplate
+        fields = ['id', 'name', 'clinical_tags', 'payload', 'created_at']
+        read_only_fields = ['id', 'payload', 'created_at']
+
+
+class RoutineSerializer(serializers.ModelSerializer):
+    items = RoutineExerciseSerializer(many=True)
+    paciente_nombre = serializers.SerializerMethodField()
+    terapeuta_nombre = serializers.SerializerMethodField()
+    override_warnings = serializers.BooleanField(write_only=True, required=False, default=False)
+    save_as_template = serializers.BooleanField(write_only=True, required=False, default=False)
+    template_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    latest_assignment = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Routine
+        fields = [
+            'id',
+            'terapeuta',
+            'terapeuta_nombre',
+            'paciente',
+            'paciente_nombre',
+            'name',
+            'version',
+            'status',
+            'estimated_duration_seconds',
+            'validation_warnings',
+            'items',
+            'override_warnings',
+            'save_as_template',
+            'template_name',
+            'latest_assignment',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'terapeuta',
+            'terapeuta_nombre',
+            'version',
+            'status',
+            'estimated_duration_seconds',
+            'validation_warnings',
+            'latest_assignment',
+            'created_at',
+            'updated_at',
+        ]
+
+    def get_paciente_nombre(self, obj):
+        return obj.paciente.get_full_name().strip() or obj.paciente.username
+
+    def get_terapeuta_nombre(self, obj):
+        return obj.terapeuta.get_full_name().strip() or obj.terapeuta.username
+
+    def get_latest_assignment(self, obj):
+        assignment = obj.assignments.order_by('-assigned_at').first()
+        if not assignment:
+            return None
+        return {
+            'id': str(assignment.id),
+            'frequency': assignment.frequency,
+            'preferred_times': assignment.preferred_times,
+            'start_date': assignment.start_date,
+            'end_date': assignment.end_date,
+            'total_weeks': assignment.total_weeks,
+            'special_instructions': assignment.special_instructions,
+            'status': assignment.status,
+            'assigned_at': assignment.assigned_at,
+        }
+
+    def validate(self, data):
+        request = self.context.get('request')
+        if request:
+            patient = data.get('paciente') or getattr(self.instance, 'paciente', None)
+            if patient:
+                if not patient_has_initial_evaluation(patient):
+                    raise serializers.ValidationError(
+                        'El paciente debe tener perfil clinico y evaluacion inicial registrada antes de crear rutinas.'
+                    )
+                therapist = therapist_for_patient(patient)
+                if therapist and therapist != request.user:
+                    raise serializers.ValidationError('Solo puedes crear rutinas para tus pacientes.')
+        if not data.get('items'):
+            raise serializers.ValidationError({'items': 'Debes seleccionar al menos un ejercicio.'})
+        return data
+
+    def prepared_items(self):
+        items = []
+        for item in self.validated_data.get('items', []):
+            exercise = Exercise.objects.get(id=item['exercise_id'])
+            items.append({**item, 'exercise': exercise})
+        return items
+
+    def clinical_warnings(self):
+        patient = self.validated_data['paciente']
+        return validate_routine_for_patient(patient, self.prepared_items())
+
+    @transaction.atomic
+    def create(self, validated_data):
+        request = self.context['request']
+        items_data = validated_data.pop('items')
+        override_warnings = validated_data.pop('override_warnings', False)
+        save_as_template = validated_data.pop('save_as_template', False)
+        template_name = validated_data.pop('template_name', '')
+        prepared_items = []
+        for item in items_data:
+            exercise = Exercise.objects.get(id=item.pop('exercise_id'))
+            prepared_items.append({**item, 'exercise': exercise})
+
+        warnings = validate_routine_for_patient(validated_data['paciente'], prepared_items)
+        routine = Routine.objects.create(
+            terapeuta=request.user,
+            version='1.0',
+            status=Routine.STATUS_VALIDATED,
+            estimated_duration_seconds=estimate_routine_duration(prepared_items),
+            validation_warnings=warnings if override_warnings else [],
+            **validated_data,
+        )
+
+        for index, item in enumerate(prepared_items, start=1):
+            order = item.pop('order', None) or index
+            RoutineExercise.objects.create(routine=routine, order=order, **item)
+
+        if save_as_template:
+            RoutineTemplate.objects.create(
+                terapeuta=request.user,
+                source_routine=routine,
+                name=template_name or routine.name,
+                clinical_tags=validated_data['paciente'].perfil_paciente.perfil_clinico.diagnostico_principal,
+                payload={
+                    'routine_id': str(routine.id),
+                    'version': routine.version,
+                    'items': [
+                        {
+                            'exercise_id': str(item['exercise'].id),
+                            'sets': item.get('sets'),
+                            'repetitions': item.get('repetitions'),
+                            'rest_seconds': item.get('rest_seconds'),
+                            'duration_seconds': item.get('duration_seconds'),
+                            'notes': item.get('notes', ''),
+                        }
+                        for item in prepared_items
+                    ],
+                },
+            )
+
+        return routine
+
+
+class RoutineAssignmentSerializer(serializers.ModelSerializer):
+    routine = serializers.SerializerMethodField()
+    routine_id = serializers.UUIDField(write_only=True)
+    paciente_nombre = serializers.SerializerMethodField()
+    terapeuta_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RoutineAssignment
+        fields = [
+            'id',
+            'routine',
+            'routine_id',
+            'paciente',
+            'paciente_nombre',
+            'terapeuta',
+            'terapeuta_nombre',
+            'frequency',
+            'preferred_times',
+            'start_date',
+            'end_date',
+            'total_weeks',
+            'special_instructions',
+            'status',
+            'assigned_at',
+            'activated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'routine',
+            'paciente',
+            'paciente_nombre',
+            'terapeuta',
+            'terapeuta_nombre',
+            'end_date',
+            'status',
+            'assigned_at',
+            'activated_at',
+        ]
+
+    def get_paciente_nombre(self, obj):
+        return obj.paciente.get_full_name().strip() or obj.paciente.username
+
+    def get_terapeuta_nombre(self, obj):
+        return obj.terapeuta.get_full_name().strip() or obj.terapeuta.username
+
+    def get_routine(self, obj):
+        return {
+            'id': str(obj.routine.id),
+            'name': obj.routine.name,
+            'version': obj.routine.version,
+            'estimated_duration_seconds': obj.routine.estimated_duration_seconds,
+            'validation_warnings': obj.routine.validation_warnings,
+            'items': RoutineExerciseSerializer(obj.routine.items.all(), many=True).data,
+        }
+
+    def validate_routine_id(self, value):
+        request = self.context.get('request')
+        routine = Routine.objects.filter(id=value).first()
+        if not routine:
+            raise serializers.ValidationError('La rutina seleccionada no existe.')
+        if request and routine.terapeuta_id != request.user.id:
+            raise serializers.ValidationError('Solo puedes asignar rutinas creadas por ti.')
+        return value
+
+    @transaction.atomic
+    def create(self, validated_data):
+        request = self.context['request']
+        routine = Routine.objects.get(id=validated_data.pop('routine_id'))
+        total_weeks = validated_data.get('total_weeks') or 12
+        assignment = RoutineAssignment.objects.create(
+            routine=routine,
+            paciente=routine.paciente,
+            terapeuta=request.user,
+            end_date=validated_data['start_date'] + timedelta(weeks=total_weeks) - timedelta(days=1),
+            status=RoutineAssignment.STATUS_ASSIGNED,
+            **validated_data,
+        )
+        create_assignment_notification(assignment)
+        return assignment
+
+    def to_representation(self, instance):
+        refresh_assignment_status(instance)
+        return super().to_representation(instance)
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'title', 'message', 'notification_type', 'payload', 'is_read', 'created_at']
 
 
 class MotivationProfileSerializer(serializers.ModelSerializer):
