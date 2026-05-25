@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from datetime import timedelta
+from django.utils import timezone
 from .models import Conversation, Message, VideoCall
 from RehabWeb_API.models import PacienteProfile, TerapeutaProfile
 from .jitsi import build_jitsi_jwt, jitsi_room_name, jitsi_script_url
@@ -53,6 +55,7 @@ class ConversationSerializer(serializers.ModelSerializer):
     ultimo_mensaje = serializers.SerializerMethodField()
     paciente_info = serializers.SerializerMethodField()
     terapeuta_info = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
@@ -65,6 +68,7 @@ class ConversationSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
             'ultimo_mensaje',
+            'unread_count',
         ]
 
     def get_ultimo_mensaje(self, obj):
@@ -79,6 +83,13 @@ class ConversationSerializer(serializers.ModelSerializer):
     def get_terapeuta_info(self, obj):
         return self._serialize_user(obj.terapeuta, ROLE_TERAPEUTA)
 
+    def get_unread_count(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return 0
+
+        return obj.mensajes.exclude(sender=request.user).exclude(status='visto').count()
+
     def _serialize_user(self, user, role):
         full_name = user.get_full_name().strip()
         data = {
@@ -88,6 +99,13 @@ class ConversationSerializer(serializers.ModelSerializer):
             'email': user.email,
             'role': role,
         }
+
+        presence = getattr(user, 'mensajeria_presence', None)
+        last_seen = presence.last_seen if presence else user.last_login
+        data.update({
+            'is_online': self._is_online(last_seen),
+            'last_seen': last_seen,
+        })
 
         if role == ROLE_TERAPEUTA:
             try:
@@ -116,6 +134,12 @@ class ConversationSerializer(serializers.ModelSerializer):
                 })
 
         return data
+
+    def _is_online(self, last_seen):
+        if not last_seen:
+            return False
+
+        return timezone.now() - last_seen <= timedelta(seconds=60)
 
     def validate(self, data):
         paciente = data.get('paciente') or getattr(self.instance, 'paciente', None)

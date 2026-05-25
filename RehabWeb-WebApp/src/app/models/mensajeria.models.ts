@@ -14,6 +14,8 @@ export interface BackendContactInfo {
   nombre_completo: string;
   email: string;
   role: 'terapeuta' | 'paciente';
+  is_online: boolean;
+  last_seen: string | null;
   especialidad?: string;
   numero_licencia?: string;
   estado?: string;
@@ -31,6 +33,7 @@ export interface BackendConversation {
   created_at: string;
   updated_at: string;
   ultimo_mensaje: BackendMessage | null;
+  unread_count: number;
 }
 
 export interface BackendVideoCall {

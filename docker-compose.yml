@@ -40,6 +40,7 @@ services:
     restart: unless-stopped
     environment:
       NG_ALLOWED_HOSTS: localhost,127.0.0.1
+      CHOKIDAR_USEPOLLING: "true"
     depends_on:
       - backend
     ports:
