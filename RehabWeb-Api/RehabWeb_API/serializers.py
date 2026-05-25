@@ -14,7 +14,7 @@ from RehabWeb_API.models import (
     WeeklySummary,
 )
 from RehabWeb_API.roles import ROLE_PACIENTE, ROLE_TERAPEUTA
-from RehabWeb_API.services import finalize_session_metrics, is_minor, therapist_for_patient
+from RehabWeb_API.services import finalize_session_metrics, is_minor, reset_expired_streak, therapist_for_patient
 
 
 ROLE_GROUPS = {
@@ -255,6 +255,7 @@ class AlertSerializer(serializers.ModelSerializer):
 
 class ExerciseSessionSerializer(serializers.ModelSerializer):
     paciente_nombre = serializers.SerializerMethodField()
+    new_badges = serializers.SerializerMethodField()
 
     class Meta:
         model = ExerciseSession
@@ -269,6 +270,7 @@ class ExerciseSessionSerializer(serializers.ModelSerializer):
             'repetitions_completed',
             'planned_repetitions',
             'duration_seconds',
+            'planned_duration_seconds',
             'pain_level',
             'mobility_score',
             'points_awarded',
@@ -276,6 +278,7 @@ class ExerciseSessionSerializer(serializers.ModelSerializer):
             'streak_days',
             'positive_feedback',
             'performance_notes',
+            'new_badges',
             'created_at',
         ]
         read_only_fields = [
@@ -286,11 +289,29 @@ class ExerciseSessionSerializer(serializers.ModelSerializer):
             'speed_bonus_points',
             'streak_days',
             'positive_feedback',
+            'new_badges',
             'created_at',
         ]
+        extra_kwargs = {
+            'paciente': {'required': False},
+        }
 
     def get_paciente_nombre(self, obj):
         return obj.paciente.get_full_name().strip() or obj.paciente.username
+
+    def get_new_badges(self, obj):
+        badges = PatientBadge.objects.filter(source_session=obj)
+        return [
+            {
+                'id': badge.id,
+                'code': badge.code,
+                'name': badge.name,
+                'description': badge.description,
+                'awarded_at': badge.awarded_at.isoformat(),
+                'source_session': badge.source_session_id,
+            }
+            for badge in badges
+        ]
 
     def validate_pain_level(self, value):
         if value > 10:
@@ -351,6 +372,10 @@ class MotivationProfileSerializer(serializers.ModelSerializer):
             instance.leaderboard_consented_at = timezone.now() if instance.leaderboard_opt_in else None
             instance.save(update_fields=['leaderboard_opt_in', 'leaderboard_consented_at', 'updated_at'])
         return instance
+
+    def to_representation(self, instance):
+        reset_expired_streak(instance)
+        return super().to_representation(instance)
 
 
 class PatientBadgeSerializer(serializers.ModelSerializer):

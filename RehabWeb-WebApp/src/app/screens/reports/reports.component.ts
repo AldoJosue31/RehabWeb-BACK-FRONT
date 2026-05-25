@@ -3,7 +3,12 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RoleAccount } from '../../services/account-admin.service';
 import { AuthService } from '../../services/auth.service';
 import { ClinicalDataService } from '../../services/clinical-data.service';
-import { EngagementService, LeaderboardEntry, WeeklySummary } from '../../services/engagement.service';
+import {
+  EngagementService,
+  LeaderboardEntry,
+  MotivationProfile,
+  WeeklySummary,
+} from '../../services/engagement.service';
 
 @Component({
   selector: 'app-reports',
@@ -58,13 +63,19 @@ import { EngagementService, LeaderboardEntry, WeeklySummary } from '../../servic
             <section class="rounded-md border border-line bg-app p-4">
               <h3 class="m-0 text-base font-bold text-main">Ranking opcional Top 10</h3>
               <div class="mt-4 grid gap-2">
-                @for (entry of leaderboard(); track entry.nombre) {
-                  <div class="flex items-center justify-between rounded-md bg-surface px-3 py-2 text-sm">
-                    <span class="font-bold text-main">{{ entry.nombre }}</span>
-                    <span class="text-secondary">{{ entry.total_points }} pts</span>
-                  </div>
-                } @empty {
-                  <p class="m-0 text-sm text-secondary">AÃºn no hay pacientes con consentimiento activo.</p>
+                @if (role() === 'paciente' && !canSeeLeaderboard()) {
+                  <p class="m-0 text-sm text-secondary">
+                    Activa tu consentimiento en Configuraciones para participar. No esta disponible para menores.
+                  </p>
+                } @else {
+                  @for (entry of leaderboard(); track entry.nombre) {
+                    <div class="flex items-center justify-between rounded-md bg-surface px-3 py-2 text-sm">
+                      <span class="font-bold text-main">{{ entry.nombre }}</span>
+                      <span class="text-secondary">{{ entry.total_points }} pts</span>
+                    </div>
+                  } @empty {
+                    <p class="m-0 text-sm text-secondary">Aun no hay pacientes con consentimiento activo.</p>
+                  }
                 }
               </div>
             </section>
@@ -122,7 +133,12 @@ export class ReportsComponent implements OnInit {
   patients = signal<RoleAccount[]>([]);
   weeklySummary = signal<WeeklySummary | null>(null);
   leaderboard = signal<LeaderboardEntry[]>([]);
+  motivation = signal<MotivationProfile | null>(null);
   role = computed(() => this.authService.getRole() ?? 'paciente');
+  canSeeLeaderboard = computed(() => {
+    const motivation = this.motivation();
+    return this.role() !== 'paciente' || !!(motivation?.leaderboard_enabled && motivation.leaderboard_opt_in);
+  });
 
   ngOnInit(): void {
     this.clinicalDataService.visiblePatients().subscribe((patients) => {
@@ -133,6 +149,10 @@ export class ReportsComponent implements OnInit {
       this.engagementService.getWeeklySummary().subscribe({
         next: (summary) => this.weeklySummary.set(summary),
         error: () => this.weeklySummary.set(null),
+      });
+      this.engagementService.getMotivation().subscribe({
+        next: (motivation) => this.motivation.set(motivation),
+        error: () => this.motivation.set(null),
       });
     }
     this.engagementService.getLeaderboard().subscribe({

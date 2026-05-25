@@ -166,6 +166,7 @@ class ExerciseSession(models.Model):
     repetitions_completed = models.PositiveIntegerField(default=0)
     planned_repetitions = models.PositiveIntegerField(default=0)
     duration_seconds = models.PositiveIntegerField(default=0)
+    planned_duration_seconds = models.PositiveIntegerField(default=0)
     pain_level = models.PositiveSmallIntegerField(default=0)
     mobility_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     points_awarded = models.PositiveIntegerField(default=0)

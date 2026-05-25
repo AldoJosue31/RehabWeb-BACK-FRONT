@@ -30,6 +30,7 @@ export interface ExerciseSession {
   repetitions_completed: number;
   planned_repetitions: number;
   duration_seconds: number;
+  planned_duration_seconds: number;
   pain_level: number;
   mobility_score: string | null;
   points_awarded: number;
@@ -37,6 +38,7 @@ export interface ExerciseSession {
   streak_days: number;
   positive_feedback: string;
   performance_notes: string;
+  new_badges: PatientBadge[];
   created_at: string;
 }
 
