@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.shortcuts import get_object_or_404
 
-from .models import Conversation, Message, VideoCall
+from .models import Conversation, Message, UserPresence, VideoCall
 from .serializers import ConversationSerializer, MessageSerializer, VideoCallSerializer
 from RehabWeb_API.permissions import HasSelectedRole
 from RehabWeb_API.roles import (
@@ -23,12 +23,27 @@ class ConversationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         selected_role = get_request_role(self.request)
+        base_queryset = Conversation.objects.select_related(
+            'paciente',
+            'terapeuta',
+            'paciente__mensajeria_presence',
+            'terapeuta__mensajeria_presence',
+        )
         if selected_role == ROLE_PACIENTE:
-            return Conversation.objects.select_related('paciente', 'terapeuta').filter(paciente=user)
+            return base_queryset.filter(paciente=user)
         if selected_role == ROLE_TERAPEUTA:
-            return Conversation.objects.select_related('paciente', 'terapeuta').filter(terapeuta=user)
+            return base_queryset.filter(terapeuta=user)
 
-        return Conversation.objects.select_related('paciente', 'terapeuta').filter(Q(paciente=user) | Q(terapeuta=user))
+        return base_queryset.filter(Q(paciente=user) | Q(terapeuta=user))
+
+    @action(detail=False, methods=['post'])
+    def presencia(self, request):
+        last_seen = timezone.now()
+        UserPresence.objects.update_or_create(
+            user=request.user,
+            defaults={'last_seen': last_seen},
+        )
+        return Response({'last_seen': last_seen})
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer

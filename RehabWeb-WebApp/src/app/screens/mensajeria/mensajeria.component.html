@@ -1,13 +1,13 @@
-<section class="rw-page h-[calc(100dvh-48px)] grid-rows-[auto_minmax(0,1fr)]">
+<section class="rw-page -mb-6 -mt-3 h-[calc(100dvh-12px)] grid-rows-[auto_minmax(0,1fr)] gap-3 max-lg:h-[calc(100dvh-76px)] max-md:gap-2">
   <header class="rw-page-header">
     <div>
       <h1 class="rw-title">Mensajería</h1>
-      <p class="rw-subtitle">{{ currentUsername || 'Usuario' }} | {{ roleName(currentUserRole) }}</p>
+      <p class="rw-subtitle">{{ messagingSubtitle() }}</p>
     </div>
   </header>
 
 <div class="rw-card flex min-h-0 overflow-hidden font-sans text-main max-md:flex-col">
-  <aside class="flex h-full w-[300px] shrink-0 flex-col border-r border-line bg-surface sm:w-[330px] max-md:h-[240px] max-md:w-full max-md:border-b max-md:border-r-0">
+  <aside class="flex h-full w-[300px] shrink-0 flex-col border-r border-line bg-surface sm:w-[330px] lg:w-[360px] max-md:h-[34dvh] max-md:min-h-[210px] max-md:w-full max-md:border-b max-md:border-r-0">
     <div class="grow overflow-y-auto">
       @if (isLoadingConversations() && patients().length === 0) {
         <div class="grid gap-0">
@@ -31,10 +31,19 @@
         >
           <div class="mb-2 flex items-center justify-between gap-3">
             <span class="min-w-0 truncate text-sm font-bold text-main">{{patient.name}}</span>
-            <span class="shrink-0 text-xs text-secondary">{{patient.lastMessageTime}}</span>
+            <span class="flex shrink-0 items-center gap-2">
+              @if(patient.unreadCount > 0) {
+                <span class="grid min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-bold leading-5 text-white">{{ patient.unreadCount }}</span>
+              }
+              <span class="text-xs text-secondary">{{patient.lastMessageTime}}</span>
+            </span>
           </div>
-          <div class="truncate text-sm leading-default text-secondary">
-            {{patient.lastMessagePreview}}
+          <div class="flex min-w-0 items-center gap-2">
+            <span
+              class="h-2 w-2 shrink-0 rounded-full"
+              [ngClass]="patient.isOnline ? 'bg-primary' : 'bg-muted'"
+            ></span>
+            <span class="min-w-0 truncate text-sm leading-default text-secondary">{{patient.lastMessagePreview}}</span>
           </div>
         </button>
         } @empty {
@@ -44,20 +53,20 @@
     </div>
   </aside>
 
-  <main class="relative flex min-w-0 grow flex-col">
-    <header class="z-10 flex items-center justify-between gap-4 border-b border-line bg-surface p-4 shadow-sm">
-      <div class="flex min-w-0 items-center gap-4">
-        <div class="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary text-base font-bold text-white">
+  <main class="relative flex min-h-0 min-w-0 grow flex-col">
+    <header class="z-10 flex items-center justify-between gap-3 border-b border-line bg-surface p-4 shadow-sm max-sm:p-3">
+      <div class="flex min-w-0 items-center gap-3 sm:gap-4">
+        <div class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-white sm:h-12 sm:w-12 sm:text-base">
           {{activePatient().initials}}
         </div>
         <div class="min-w-0">
           <h3 class="m-0 truncate text-base font-bold leading-solid text-main">{{activePatient().name}}</h3>
-          <p class="mt-1 flex items-center gap-2 text-xs font-medium text-primary">
+          <p class="mt-1 flex min-w-0 items-center gap-2 text-xs font-medium" [ngClass]="activePatient().isOnline ? 'text-primary' : 'text-secondary'">
             <span
-              class="inline-block h-2 w-2 rounded-full"
+              class="inline-block h-2 w-2 shrink-0 rounded-full"
               [ngClass]="activePatient().isOnline ? 'bg-primary' : 'bg-muted'"
             ></span>
-            {{ activePatient().roleLabel }} - {{ activePatient().isOnline ? 'En línea' : 'Desconectado' }}
+            <span class="truncate">{{ activePatient().roleLabel }} - {{ activePatient().isOnline ? 'En linea' : activePatient().lastSeenLabel }}</span>
           </p>
         </div>
       </div>
@@ -95,7 +104,7 @@
         </div>
       </div>
     } @else {
-      <div class="flex grow flex-col gap-5 overflow-y-auto bg-app p-5" #chatContainer (scroll)="onChatScroll()">
+      <div class="flex grow flex-col gap-5 overflow-y-auto bg-app p-5 max-sm:gap-4 max-sm:p-3" #chatContainer (scroll)="onChatScroll()">
         <div class="mb-4 flex justify-center">
           <span class="flex items-center gap-2 rounded-full bg-line px-4 py-2 text-xs font-medium text-secondary">
             <svg class="h-3.5 w-3.5 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
@@ -224,7 +233,7 @@
         }
       </div>
 
-      <footer class="relative flex items-center gap-3 border-t border-line bg-surface p-4">
+      <footer class="relative flex items-center gap-3 border-t border-line bg-surface p-4 max-sm:gap-2 max-sm:p-3">
         @if(errorMsg()) {
           <div class="absolute -top-14 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-md border border-danger bg-danger-bg px-4 py-3 text-xs font-medium text-danger shadow-md">
             <svg class="h-4 w-4 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
@@ -258,7 +267,7 @@
           </svg>
         </button>
 
-        <div class="flex grow items-center rounded-full border border-line bg-app px-5 py-3 transition duration-200 focus-within:border-focus focus-within:ring-2 focus-within:ring-focus/20">
+        <div class="flex min-w-0 grow items-center rounded-full border border-line bg-app px-5 py-3 transition duration-200 focus-within:border-focus focus-within:ring-2 focus-within:ring-focus/20 max-sm:px-4">
           <input
             class="w-full border-0 bg-transparent p-0 text-sm text-main outline-none placeholder:text-muted"
             type="text"

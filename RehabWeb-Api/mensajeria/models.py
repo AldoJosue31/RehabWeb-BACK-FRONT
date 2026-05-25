@@ -1,6 +1,22 @@
 import uuid
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
+
+
+class UserPresence(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        related_name='mensajeria_presence',
+        on_delete=models.CASCADE,
+    )
+    last_seen = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-last_seen']
+
+    def __str__(self):
+        return f"Presencia {self.user} - {self.last_seen}"
 
 class Conversation(models.Model):
     paciente = models.ForeignKey(

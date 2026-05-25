@@ -18,6 +18,14 @@ export class MensajeriaService {
     return this.http.get<BackendConversation[]>(`${this.apiUrl}/conversaciones/`, this.httpOptions);
   }
 
+  actualizarPresencia(): Observable<{ last_seen: string }> {
+    return this.http.post<{ last_seen: string }>(
+      `${this.apiUrl}/conversaciones/presencia/`,
+      {},
+      this.httpOptions,
+    );
+  }
+
   getMensajes(conversationId: number, before?: string): Observable<{ messages: BackendMessage[]; hasMore: boolean }> {
     const beforeParam = before ? `&before=${encodeURIComponent(before)}` : '';
     return this.http.get<BackendMessage[]>(

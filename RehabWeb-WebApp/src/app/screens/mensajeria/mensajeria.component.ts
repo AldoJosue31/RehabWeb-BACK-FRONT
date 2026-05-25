@@ -26,6 +26,8 @@ interface UIPatient {
   lastMessagePreview: string;
   initials: string;
   isOnline: boolean;
+  lastSeenLabel: string;
+  unreadCount: number;
   roleLabel: string;
 }
 
@@ -111,10 +113,29 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
         initials: this.contactInitials(contactName, roleLabel),
         lastMessageTime: conv.ultimo_mensaje ? this.formatTime(new Date(conv.ultimo_mensaje.timestamp)) : '',
         lastMessagePreview: conv.ultimo_mensaje?.encrypted_text || (conv.ultimo_mensaje?.file_attachment ? '📎 Archivo' : 'Sin mensajes'),
-        isOnline: true,
+        isOnline: contact?.is_online ?? false,
+        lastSeenLabel: this.formatLastSeen(contact?.last_seen ?? null),
+        unreadCount: conv.unread_count ?? 0,
         roleLabel
       };
     });
+  });
+
+  totalUnreadMessages = computed(() => {
+    return this.conversations().reduce((total, conv) => total + (conv.unread_count ?? 0), 0);
+  });
+
+  messagingSubtitle = computed(() => {
+    const chatCount = this.conversations().length;
+    const unreadCount = this.totalUnreadMessages();
+    const chatLabel = chatCount === 1 ? '1 chat' : `${chatCount} chats`;
+    const unreadLabel = unreadCount === 0
+      ? 'Sin mensajes nuevos'
+      : unreadCount === 1
+        ? '1 mensaje nuevo'
+        : `${unreadCount} mensajes nuevos`;
+
+    return `${chatLabel} | ${unreadLabel}`;
   });
 
   selectedPatientId = computed(() => this.selectedConvId()?.toString() || '');
@@ -125,6 +146,8 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
     lastMessagePreview: '',
     initials: '?',
     isOnline: false,
+    lastSeenLabel: 'Sin conexion reciente',
+    unreadCount: 0,
     roleLabel: 'Contacto'
   });
 
@@ -224,7 +247,17 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
       .pipe(startWith(0))
       .subscribe(() => this.cargarConversaciones(false));
 
-    this.pollingSubs = [mensajesSub, conversacionesSub];
+    const presenciaSub = interval(30000)
+      .pipe(startWith(0))
+      .subscribe(() => this.actualizarPresencia());
+
+    this.pollingSubs = [mensajesSub, conversacionesSub, presenciaSub];
+  }
+
+  private actualizarPresencia() {
+    this.mensajeriaService.actualizarPresencia().subscribe({
+      error: err => this.handleAuthError(err)
+    });
   }
 
   cargarConversaciones(showLoading = true) {
@@ -417,6 +450,28 @@ export class MensajeriaComponent implements OnInit, OnDestroy {
 
   formatTime(date: Date): string {
     return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  formatLastSeen(value: string | null): string {
+    if (!value) return 'Sin conexion reciente';
+
+    const lastSeen = new Date(value);
+    const diffMs = Date.now() - lastSeen.getTime();
+    if (!Number.isFinite(diffMs) || diffMs < 0) return 'Conexion reciente';
+    if (diffMs < 60_000) return 'En linea';
+
+    const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+      ['year', 365 * 24 * 60 * 60 * 1000],
+      ['month', 30 * 24 * 60 * 60 * 1000],
+      ['week', 7 * 24 * 60 * 60 * 1000],
+      ['day', 24 * 60 * 60 * 1000],
+      ['hour', 60 * 60 * 1000],
+      ['minute', 60 * 1000],
+    ];
+    const formatter = new Intl.RelativeTimeFormat('es-MX', { numeric: 'auto' });
+    const [unit, unitMs] = units.find(([, ms]) => diffMs >= ms) ?? ['minute', 60 * 1000];
+
+    return `Ultima conexion ${formatter.format(-Math.floor(diffMs / unitMs), unit)}`;
   }
 
   roleName(role: AuthRole): string {
