@@ -7,16 +7,24 @@ from RehabWeb_API.views.auth import AuthTokenView
 from RehabWeb_API.views.accounts import RoleAccountDetailView, RoleAccountListCreateView
 from RehabWeb_API.views.engagement import (
     AlertViewSet,
+    ExerciseViewSet,
     ExerciseSessionViewSet,
     LeaderboardView,
     MotivationProfileView,
+    NotificationViewSet,
     PatientBadgeListView,
+    RoutineAssignmentViewSet,
+    RoutineViewSet,
     WeeklySummaryView,
 )
 
 router = DefaultRouter()
 router.register(r'alerts', AlertViewSet, basename='alert')
 router.register(r'sessions', ExerciseSessionViewSet, basename='session')
+router.register(r'exercises', ExerciseViewSet, basename='exercise')
+router.register(r'routines', RoutineViewSet, basename='routine')
+router.register(r'routine-assignments', RoutineAssignmentViewSet, basename='routine-assignment')
+router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

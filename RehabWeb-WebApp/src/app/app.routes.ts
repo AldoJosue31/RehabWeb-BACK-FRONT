@@ -32,6 +32,13 @@ export const routes: Routes = [
           import('./screens/patients/patients.component').then((m) => m.PatientsComponent),
       },
       {
+        path: 'rutinas/nueva',
+        canActivate: [roleGuard],
+        data: { roles: ['terapeuta'] },
+        loadComponent: () =>
+          import('./screens/routines/routines.component').then((m) => m.RoutinesComponent),
+      },
+      {
         path: 'historial-sesiones',
         canActivate: [roleGuard],
         data: { roles: ['terapeuta', 'paciente'] },

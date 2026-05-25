@@ -18,6 +18,10 @@ import { EngagementService, MotivationProfile, RehabAlert } from '../../services
           <p class="rw-subtitle">{{ subtitle() }}</p>
         </div>
         @if (role() === 'terapeuta') {
+          <a class="rw-action rw-action--primary rounded-full" routerLink="/rutinas/nueva">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+            Nueva Rutina
+          </a>
           <a class="rw-action rw-action--primary rounded-full" routerLink="/mensajeria">
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
             Abrir mensajería

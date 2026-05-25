@@ -7,10 +7,13 @@ from django.utils import timezone
 
 from RehabWeb_API.models import (
     Alert,
+    Exercise,
     ExerciseSession,
     MotivationProfile,
+    Notification,
     PacienteProfile,
     PatientBadge,
+    RoutineAssignment,
     WeeklySummary,
 )
 
@@ -25,6 +28,13 @@ BADGES = {
     'HIGH_REPS_100': ('100 repeticiones', 'Completo 100 repeticiones en una sesion.'),
     'SPEED_20': ('Velocidad', 'Completo una sesion al menos 20% mas rapido.'),
     'COGNITIVE_5': ('Cerebro Ganador', 'Completo ejercicios cognitivos 5 veces.'),
+}
+
+MOBILITY_ORDER = {
+    'dependiente': 0,
+    'bajo': 1,
+    'medio': 2,
+    'alto': 3,
 }
 
 
@@ -55,6 +65,169 @@ def is_minor(patient, today=None):
     today = today or timezone.localdate()
     age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
     return age < 18
+
+
+def patient_age(patient, today=None):
+    profile = getattr(patient, 'perfil_paciente', None)
+    birth_date = profile.fecha_nacimiento if profile else None
+    if not birth_date:
+        return None
+
+    today = today or timezone.localdate()
+    return today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+
+
+def patient_has_initial_evaluation(patient):
+    profile = getattr(patient, 'perfil_paciente', None)
+    clinical_profile = profile.perfil_clinico if profile else None
+    if not clinical_profile:
+        return False
+
+    diagnosis = (clinical_profile.diagnostico_principal or '').strip().lower()
+    has_real_diagnosis = diagnosis and diagnosis != 'sin diagnostico registrado'
+    return bool(has_real_diagnosis and (clinical_profile.evaluacion_inicial_registrada or clinical_profile.historial_medico or clinical_profile.restricciones or clinical_profile.nivel_movilidad))
+
+
+def clinical_text_for_patient(patient):
+    profile = getattr(patient, 'perfil_paciente', None)
+    clinical_profile = profile.perfil_clinico if profile else None
+    if not clinical_profile:
+        return ''
+
+    parts = [
+        clinical_profile.diagnostico_principal,
+        clinical_profile.historial_medico,
+        clinical_profile.restricciones,
+        profile.estrategia_validacion if profile else '',
+    ]
+    return ' '.join(part for part in parts if part).lower()
+
+
+def split_terms(value):
+    return [term.strip().lower() for term in (value or '').replace(';', ',').split(',') if term.strip()]
+
+
+def exercise_matches_patient_profile(exercise, patient):
+    profile = getattr(patient, 'perfil_paciente', None)
+    clinical_profile = profile.perfil_clinico if profile else None
+    if not clinical_profile:
+        return False
+
+    patient_mobility = MOBILITY_ORDER.get(clinical_profile.nivel_movilidad, 2)
+    exercise_mobility = MOBILITY_ORDER.get(exercise.min_mobility_level, 1)
+    if patient_mobility < exercise_mobility:
+        return False
+
+    clinical_text = clinical_text_for_patient(patient)
+    contraindications = split_terms(exercise.contraindications)
+    if contraindications and any(term in clinical_text for term in contraindications):
+        return False
+
+    compatible_terms = split_terms(exercise.compatible_diagnoses)
+    if not compatible_terms:
+        return True
+
+    if any(term in ('general', 'todos', 'libre') for term in compatible_terms):
+        return True
+
+    return any(term in clinical_text for term in compatible_terms)
+
+
+def compatible_exercises_for_patient(patient):
+    return [
+        exercise
+        for exercise in Exercise.objects.filter(active=True)
+        if exercise_matches_patient_profile(exercise, patient)
+    ]
+
+
+def validate_routine_item_for_patient(exercise, patient, item_data):
+    warnings = []
+    profile = getattr(patient, 'perfil_paciente', None)
+    clinical_profile = profile.perfil_clinico if profile else None
+    clinical_text = clinical_text_for_patient(patient)
+    repetitions = int(item_data.get('repetitions') or exercise.default_repetitions or 0)
+    sets = int(item_data.get('sets') or exercise.default_sets or 0)
+    duration_seconds = int(item_data.get('duration_seconds') or exercise.default_duration_seconds or 0)
+
+    if not clinical_profile:
+        warnings.append('El paciente no tiene perfil clinico completo.')
+        return warnings
+
+    if not exercise_matches_patient_profile(exercise, patient):
+        warnings.append(f'{exercise.name} no coincide con el perfil clinico o restricciones del paciente.')
+
+    age = patient_age(patient)
+    if age is not None and age >= 65:
+        if repetitions * sets > 60:
+            warnings.append(f'{exercise.name}: volumen alto para adulto mayor.')
+        if duration_seconds > 1200:
+            warnings.append(f'{exercise.name}: duracion prolongada para adulto mayor.')
+
+    has_quadriplegia = any(term in clinical_text for term in ['cuadriplejia', 'quadriplejia', 'quadriplegia', 'tetraplejia'])
+    if has_quadriplegia:
+        if clinical_profile.nivel_movilidad != 'dependiente':
+            warnings.append('El perfil sugiere cuadriplejia; revisa que el nivel de movilidad sea dependiente.')
+        if exercise.min_mobility_level in ('medio', 'alto'):
+            warnings.append(f'{exercise.name}: requiere movilidad mayor a la esperada para cuadriplejia.')
+        if repetitions * sets > 30:
+            warnings.append(f'{exercise.name}: volumen alto para paciente con cuadriplejia.')
+
+    if clinical_profile.nivel_movilidad == 'dependiente' and exercise.min_mobility_level in ('medio', 'alto'):
+        warnings.append(f'{exercise.name}: requiere movilidad {exercise.min_mobility_level}.')
+
+    return warnings
+
+
+def validate_routine_for_patient(patient, items):
+    warnings = []
+    if not patient_has_initial_evaluation(patient):
+        warnings.append('El paciente debe tener perfil clinico y evaluacion inicial registrada.')
+
+    for item in items:
+        exercise = item.get('exercise')
+        if exercise:
+            warnings.extend(validate_routine_item_for_patient(exercise, patient, item))
+    return warnings
+
+
+def estimate_routine_duration(items):
+    total = 0
+    for item in items:
+        sets = int(item.get('sets') or 0)
+        repetitions = int(item.get('repetitions') or 0)
+        rest_seconds = int(item.get('rest_seconds') or 0)
+        duration_seconds = int(item.get('duration_seconds') or 0)
+        active_seconds = duration_seconds or repetitions * 6
+        total += max(sets, 1) * active_seconds
+        total += max(sets - 1, 0) * rest_seconds
+    return total
+
+
+def create_assignment_notification(assignment):
+    return Notification.objects.create(
+        recipient=assignment.paciente,
+        title='Nueva rutina asignada',
+        message=(
+            f'Tu terapeuta asigno la rutina "{assignment.routine.name}" '
+            f'para iniciar el {assignment.start_date.isoformat()}.'
+        ),
+        notification_type=Notification.TYPE_ROUTINE_ASSIGNED,
+        payload={
+            'assignment_id': str(assignment.id),
+            'routine_id': str(assignment.routine_id),
+            'start_date': assignment.start_date.isoformat(),
+        },
+    )
+
+
+def refresh_assignment_status(assignment, today=None):
+    today = today or timezone.localdate()
+    if assignment.status == RoutineAssignment.STATUS_ASSIGNED and assignment.start_date <= today:
+        assignment.status = RoutineAssignment.STATUS_ACTIVE
+        assignment.activated_at = timezone.now()
+        assignment.save(update_fields=['status', 'activated_at'])
+    return assignment
 
 
 def calculate_speed_bonus(repetitions, duration_seconds, planned_duration_seconds=0):

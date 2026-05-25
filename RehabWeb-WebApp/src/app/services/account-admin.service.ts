@@ -22,6 +22,7 @@ export interface RoleAccount {
   historial_medico?: string;
   nivel_movilidad?: 'bajo' | 'medio' | 'alto' | 'dependiente';
   restricciones?: string;
+  evaluacion_inicial_registrada?: boolean;
   total_points?: number;
   current_streak?: number;
   best_streak?: number;

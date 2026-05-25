@@ -17,6 +17,7 @@ class PerfilClinico(models.Model):
     historial_medico = models.TextField(blank=True)
     nivel_movilidad = models.CharField(max_length=20, choices=NIVEL_MOVILIDAD_CHOICES, default='medio')
     restricciones = models.TextField(blank=True)
+    evaluacion_inicial_registrada = models.BooleanField(default=False)
 
     def __str__(self):
         return self.diagnostico_principal
@@ -181,6 +182,179 @@ class ExerciseSession(models.Model):
 
     def __str__(self):
         return f'{self.exercise_name} - {self.paciente}'
+
+
+class Exercise(models.Model):
+    MOBILITY_CHOICES = PerfilClinico.NIVEL_MOVILIDAD_CHOICES
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=140)
+    description = models.TextField(blank=True)
+    category = models.CharField(max_length=80, default='Movilidad')
+    compatible_diagnoses = models.TextField(blank=True)
+    contraindications = models.TextField(blank=True)
+    min_mobility_level = models.CharField(max_length=20, choices=MOBILITY_CHOICES, default='bajo')
+    default_sets = models.PositiveSmallIntegerField(default=3)
+    default_repetitions = models.PositiveIntegerField(default=10)
+    default_rest_seconds = models.PositiveIntegerField(default=60)
+    default_duration_seconds = models.PositiveIntegerField(default=600)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['category', 'name']
+
+    def __str__(self):
+        return self.name
+
+
+class Routine(models.Model):
+    STATUS_DRAFT = 'borrador'
+    STATUS_VALIDATED = 'validada'
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Borrador'),
+        (STATUS_VALIDATED, 'Validada'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    terapeuta = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name='rutinas_creadas',
+        on_delete=models.CASCADE,
+    )
+    paciente = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name='rutinas_recibidas',
+        on_delete=models.CASCADE,
+    )
+    name = models.CharField(max_length=160)
+    version = models.CharField(max_length=20, default='1.0')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_VALIDATED)
+    estimated_duration_seconds = models.PositiveIntegerField(default=0)
+    validation_warnings = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.name} v{self.version}'
+
+
+class RoutineExercise(models.Model):
+    routine = models.ForeignKey(Routine, related_name='items', on_delete=models.CASCADE)
+    exercise = models.ForeignKey(Exercise, related_name='routine_items', on_delete=models.PROTECT)
+    order = models.PositiveSmallIntegerField(default=1)
+    sets = models.PositiveSmallIntegerField(default=3)
+    repetitions = models.PositiveIntegerField(default=10)
+    rest_seconds = models.PositiveIntegerField(default=60)
+    duration_seconds = models.PositiveIntegerField(default=600)
+    notes = models.CharField(max_length=240, blank=True)
+
+    class Meta:
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f'{self.routine} - {self.exercise}'
+
+
+class RoutineTemplate(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    terapeuta = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name='plantillas_rutina',
+        on_delete=models.CASCADE,
+    )
+    source_routine = models.ForeignKey(
+        Routine,
+        related_name='templates',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    name = models.CharField(max_length=160)
+    clinical_tags = models.CharField(max_length=260, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+
+class RoutineAssignment(models.Model):
+    STATUS_ASSIGNED = 'asignada'
+    STATUS_ACTIVE = 'activa'
+    STATUS_COMPLETED = 'completada'
+    STATUS_CANCELLED = 'cancelada'
+
+    STATUS_CHOICES = [
+        (STATUS_ASSIGNED, 'Asignada'),
+        (STATUS_ACTIVE, 'Activa'),
+        (STATUS_COMPLETED, 'Completada'),
+        (STATUS_CANCELLED, 'Cancelada'),
+    ]
+
+    FREQUENCY_CHOICES = [
+        ('diaria', 'Diaria'),
+        ('3_semana', '3 veces por semana'),
+        ('2_semana', '2 veces por semana'),
+        ('semanal', 'Semanal'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    routine = models.ForeignKey(Routine, related_name='assignments', on_delete=models.CASCADE)
+    paciente = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name='asignaciones_rutina',
+        on_delete=models.CASCADE,
+    )
+    terapeuta = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name='asignaciones_creadas',
+        on_delete=models.CASCADE,
+    )
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default='diaria')
+    preferred_times = models.CharField(max_length=120, blank=True)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    total_weeks = models.PositiveSmallIntegerField(default=12)
+    special_instructions = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ASSIGNED)
+    assigned_at = models.DateTimeField(default=timezone.now)
+    activated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-assigned_at']
+
+    def __str__(self):
+        return f'{self.routine} -> {self.paciente}'
+
+
+class Notification(models.Model):
+    TYPE_ROUTINE_ASSIGNED = 'routine_assigned'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name='notificaciones',
+        on_delete=models.CASCADE,
+    )
+    title = models.CharField(max_length=160)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=60, default=TYPE_ROUTINE_ASSIGNED)
+    payload = models.JSONField(default=dict, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.title} - {self.recipient}'
 
 
 class PatientBadge(models.Model):

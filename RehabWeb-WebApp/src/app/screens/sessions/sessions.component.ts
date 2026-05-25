@@ -10,6 +10,7 @@ import {
   MotivationProfile,
   PatientBadge,
 } from '../../services/engagement.service';
+import { RoutineAssignment, RoutineExerciseItem, RoutineService, Notification } from '../../services/routine.service';
 
 @Component({
   selector: 'app-sessions',
@@ -42,6 +43,56 @@ import {
                 }
               </div>
               <span class="rounded-md bg-surface px-4 py-2 text-sm font-bold text-primary">Visualizaci&oacute;n inmediata</span>
+            </div>
+          </article>
+        }
+
+        @if (role() === 'paciente' && notifications().length) {
+          <article class="rounded-lg border border-info bg-info/10 p-4">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 class="m-0 text-base font-bold text-main">{{ notifications()[0].title }}</h2>
+                <p class="m-0 mt-1 text-sm text-secondary">{{ notifications()[0].message }}</p>
+              </div>
+              <button class="rw-action" type="button" (click)="markNotificationRead(notifications()[0].id)">Marcar leida</button>
+            </div>
+          </article>
+        }
+
+        @if (role() === 'paciente' && assignments().length) {
+          <article class="rw-card rw-card-pad">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="m-0 text-lg font-bold text-main">Rutinas asignadas</h2>
+                <p class="m-0 text-sm text-secondary">Disponibles tras sincronizacion con la cuenta del paciente.</p>
+              </div>
+              <span class="rounded-md bg-primary-low px-3 py-1 text-xs font-bold text-primary">{{ assignments().length }} activas/asignadas</span>
+            </div>
+            <div class="grid gap-3 lg:grid-cols-2">
+              @for (assignment of assignments(); track assignment.id) {
+                <div class="rounded-md border border-line bg-app p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <strong class="text-sm text-main">{{ assignment.routine.name }} v{{ assignment.routine.version }}</strong>
+                      <p class="m-0 mt-1 text-xs text-secondary">
+                        {{ assignment.frequency }} · {{ assignment.preferred_times || 'sin horario fijo' }} · {{ assignment.start_date | date:'mediumDate' }}
+                      </p>
+                    </div>
+                    <span class="rounded-md bg-primary-low px-3 py-1 text-xs font-bold text-primary">{{ assignment.status }}</span>
+                  </div>
+                  @if (assignment.special_instructions) {
+                    <p class="m-0 mt-3 rounded-md bg-surface p-3 text-xs text-secondary">{{ assignment.special_instructions }}</p>
+                  }
+                  <div class="mt-3 grid gap-2">
+                    @for (item of assignment.routine.items; track item.id || item.exercise?.id) {
+                      <button class="rounded-md border border-line bg-surface p-3 text-left text-sm hover:border-primary" type="button" (click)="prepareAssignedExercise(item)">
+                        <strong class="text-main">{{ item.exercise?.name }}</strong>
+                        <span class="ml-2 text-xs text-secondary">{{ item.sets }}x{{ item.repetitions }}</span>
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
             </div>
           </article>
         }
@@ -176,6 +227,7 @@ export class SessionsComponent implements OnInit {
   private authService = inject(AuthService);
   private clinicalDataService = inject(ClinicalDataService);
   private engagementService = inject(EngagementService);
+  private routineService = inject(RoutineService);
 
   loading = signal(true);
   saving = signal(false);
@@ -184,6 +236,8 @@ export class SessionsComponent implements OnInit {
   patients = signal<RoleAccount[]>([]);
   motivation = signal<MotivationProfile | null>(null);
   badges = signal<PatientBadge[]>([]);
+  assignments = signal<RoutineAssignment[]>([]);
+  notifications = signal<Notification[]>([]);
   newlyUnlockedBadges = signal<PatientBadge[]>([]);
   lastSession = signal<ExerciseSession | null>(null);
   role = computed(() => this.authService.getRole() ?? 'paciente');
@@ -216,6 +270,10 @@ export class SessionsComponent implements OnInit {
     if (this.role() === 'paciente') {
       this.engagementService.getMotivation().subscribe((stats) => this.motivation.set(stats));
       this.engagementService.getBadges().subscribe((badges) => this.badges.set(badges));
+      this.routineService.getAssignments().subscribe((assignments) => this.assignments.set(assignments));
+      this.routineService.getNotifications().subscribe((notifications) => {
+        this.notifications.set(notifications.filter((notification) => !notification.is_read));
+      });
     }
   }
 
@@ -254,6 +312,23 @@ export class SessionsComponent implements OnInit {
 
   displayName(account: RoleAccount): string {
     return this.clinicalDataService.displayName(account);
+  }
+
+  prepareAssignedExercise(item: RoutineExerciseItem): void {
+    this.sessionForm.patchValue({
+      exercise_name: item.exercise?.name ?? 'Ejercicio asignado',
+      repetitions_completed: item.repetitions,
+      planned_repetitions: item.repetitions,
+      duration_seconds: item.duration_seconds,
+      planned_duration_seconds: item.duration_seconds,
+      pain_level: 0,
+    });
+  }
+
+  markNotificationRead(id: string): void {
+    this.routineService.markNotificationRead(id).subscribe(() => {
+      this.notifications.update((notifications) => notifications.filter((notification) => notification.id !== id));
+    });
   }
 
   private celebrate(): void {

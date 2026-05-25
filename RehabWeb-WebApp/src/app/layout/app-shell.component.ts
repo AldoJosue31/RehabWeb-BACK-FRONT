@@ -5,7 +5,7 @@ import { RoleAccount } from '../services/account-admin.service';
 import { AuthService } from '../services/auth.service';
 import { ClinicalDataService } from '../services/clinical-data.service';
 
-type NavIcon = 'pulse' | 'users' | 'history' | 'chart' | 'bell' | 'report' | 'message' | 'settings';
+type NavIcon = 'pulse' | 'users' | 'routine' | 'history' | 'chart' | 'bell' | 'report' | 'message' | 'settings';
 
 interface NavItem {
   label: string;
@@ -246,6 +246,9 @@ interface NavItem {
         @case ('history') {
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v6h6M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
         }
+        @case ('routine') {
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5h6M9 3h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1V5a2 2 0 0 1 2-2ZM8 12h8M8 16h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        }
         @case ('chart') {
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 19V5M8 17V9M12 19V3M16 16v-5M20 19V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
         }
@@ -277,6 +280,7 @@ export class AppShellComponent implements OnInit {
   private mainNavItems: NavItem[] = [
     { label: 'Tablero de Control', path: '/tablero-control', icon: 'pulse', roles: ['terapeuta', 'paciente'] },
     { label: 'Pacientes', path: '/pacientes', icon: 'users', roles: ['terapeuta'] },
+    { label: 'Nueva Rutina', path: '/rutinas/nueva', icon: 'routine', roles: ['terapeuta'] },
     { label: 'Sesiones y Progreso', path: '/historial-sesiones', icon: 'history', roles: ['terapeuta', 'paciente'] },
     { label: 'Comparativa de Desempeño', path: '/comparativa-desempeno', icon: 'chart', roles: ['terapeuta'] },
     { label: 'Alertas de Inactividad', path: '/alertas-inactividad', icon: 'bell', roles: ['terapeuta'] },
