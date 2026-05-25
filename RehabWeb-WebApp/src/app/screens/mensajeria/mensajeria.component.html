@@ -76,12 +76,13 @@
           <button
             class="flex items-center gap-2 rounded-full border border-primary bg-primary-low px-4 py-2 text-sm font-medium text-primary transition duration-200 hover:bg-primary hover:text-white max-md:px-3"
             (click)="iniciarVideollamada()"
+            [disabled]="videoPermissionState() === 'checking'"
           title="Iniciar consulta por videollamada"
           >
             <svg class="h-[22px] w-[22px] shrink-0" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
               <path fill-rule="evenodd" d="M0 5a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.983 1.738l3.11-1.382A1 1 0 0 1 16 4.269v7.462a1 1 0 0 1-1.406.913l-3.111-1.382A2 2 0 0 1 9.5 13H2a2 2 0 0 1-2-2V5z"/>
             </svg>
-            <span class="max-md:hidden">Iniciar consulta</span>
+            <span class="max-md:hidden">{{ videoPermissionState() === 'checking' ? 'Solicitando permisos...' : 'Iniciar consulta' }}</span>
           </button>
         }
       </div>
@@ -185,8 +186,9 @@
                     <button
                       class="w-full rounded-md bg-primary px-4 py-2 text-sm font-bold text-white transition duration-200 hover:bg-primary/90"
                       (click)="unirseVideollamada(msg.text)"
+                      [disabled]="videoPermissionState() === 'checking'"
                     >
-                      Unirse a la reunión
+                      {{ videoPermissionState() === 'checking' ? 'Solicitando permisos...' : 'Unirse a la reunión' }}
                     </button>
                   } @else {
                     <button
