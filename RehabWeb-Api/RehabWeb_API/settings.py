@@ -127,13 +127,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Configuration — Desarrollo con Angular
 
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:4200',
-    'http://127.0.0.1:4200',
-    'http://localhost:4201',
-    'http://127.0.0.1:4201',
-    'http://frontend:4200',
-]
+CORS_ALLOWED_ORIGINS = os.getenv(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:4200,http://127.0.0.1:4200,https://localhost:4200,https://127.0.0.1:4200,http://frontend:4200',
+).split(',')
 
 CORS_ALLOW_CREDENTIALS = True
 

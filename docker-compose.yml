@@ -40,6 +40,8 @@ services:
     restart: unless-stopped
     environment:
       NG_ALLOWED_HOSTS: ${FRONTEND_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      FRONTEND_HTTPS: ${FRONTEND_HTTPS:-true}
+      FRONTEND_LAN_IP: ${FRONTEND_LAN_IP:-}
       CHOKIDAR_USEPOLLING: "true"
     depends_on:
       - backend
