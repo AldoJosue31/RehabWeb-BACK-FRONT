@@ -42,11 +42,11 @@ import { EngagementService, MotivationProfile, RehabAlert } from '../../services
                   <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 4.3 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
                 </span>
                 <div>
-                  <h2 class="m-0 text-base font-bold leading-solid text-main">Alerta de Inactividad de Pacientes</h2>
+                  <h2 class="m-0 text-base font-bold leading-solid text-main">Alertas clínicas</h2>
                   <p class="m-0 text-sm text-secondary">{{ inactiveCount() }} pacientes requieren atención inmediata.</p>
                 </div>
               </div>
-              <span class="rounded-full border border-warning/40 bg-surface px-4 py-2 text-xs font-bold text-main">Ver todos ({{ inactiveCount() }})</span>
+              <a class="rw-action rounded-full border-warning/40 bg-surface text-main" routerLink="/alertas">Ver todos ({{ inactiveCount() }})</a>
             </div>
           </article>
         }

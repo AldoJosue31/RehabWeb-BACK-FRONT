@@ -53,12 +53,13 @@ export const routes: Routes = [
           import('./screens/performance/performance.component').then((m) => m.PerformanceComponent),
       },
       {
-        path: 'alertas-inactividad',
+        path: 'alertas',
         canActivate: [roleGuard],
         data: { roles: ['terapeuta'] },
         loadComponent: () =>
           import('./screens/alerts/alerts.component').then((m) => m.AlertsComponent),
       },
+      { path: 'alertas-inactividad', pathMatch: 'full', redirectTo: 'alertas' },
       {
         path: 'reportes',
         canActivate: [roleGuard],

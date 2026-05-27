@@ -19,6 +19,7 @@ from RehabWeb_API.views.engagement import (
 )
 
 router = DefaultRouter()
+router.register(r'alertas', AlertViewSet, basename='alerta')
 router.register(r'alerts', AlertViewSet, basename='alert')
 router.register(r'sessions', ExerciseSessionViewSet, basename='session')
 router.register(r'exercises', ExerciseViewSet, basename='exercise')

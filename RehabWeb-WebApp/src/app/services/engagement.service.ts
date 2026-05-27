@@ -113,19 +113,19 @@ export class EngagementService {
   motivationRefreshes$ = this.motivationRefreshSubject.asObservable();
 
   getAlerts(): Observable<RehabAlert[]> {
-    return this.http.get<RehabAlert[]>(`${this.apiUrl}/alerts/`);
+    return this.http.get<RehabAlert[]>(`${this.apiUrl}/alertas/`);
   }
 
   markAlertReviewed(id: string): Observable<RehabAlert> {
-    return this.http.patch<RehabAlert>(`${this.apiUrl}/alerts/${id}/marcar_revisada/`, {});
+    return this.http.patch<RehabAlert>(`${this.apiUrl}/alertas/${id}/marcar_revisada/`, {});
   }
 
   resolveAlert(id: string): Observable<RehabAlert> {
-    return this.http.patch<RehabAlert>(`${this.apiUrl}/alerts/${id}/resolver/`, {});
+    return this.http.patch<RehabAlert>(`${this.apiUrl}/alertas/${id}/resolver/`, {});
   }
 
   runInactivityDetection(): Observable<{ generadas: number }> {
-    return this.http.post<{ generadas: number }>(`${this.apiUrl}/alerts/generar_inactividad/`, {});
+    return this.http.post<{ generadas: number }>(`${this.apiUrl}/alertas/generar_inactividad/`, {});
   }
 
   getSessions(): Observable<ExerciseSession[]> {

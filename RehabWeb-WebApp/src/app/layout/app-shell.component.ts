@@ -215,7 +215,7 @@ interface NavItem {
                     <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <path d="M10 17l5-5-5-5M15 12H3M21 4v16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
-                    <span>Cerrar sesiÃ³n</span>
+                    <span>Cerrar sesión</span>
                   </button>
                 </div>
               </section>
@@ -447,7 +447,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     { label: 'Nueva Rutina', path: '/rutinas/nueva', icon: 'routine', roles: ['terapeuta'] },
     { label: 'Sesiones y Progreso', path: '/historial-sesiones', icon: 'history', roles: ['terapeuta', 'paciente'] },
     { label: 'Comparativa de Desempeño', path: '/comparativa-desempeno', icon: 'chart', roles: ['terapeuta'] },
-    { label: 'Alertas de Inactividad', path: '/alertas-inactividad', icon: 'bell', roles: ['terapeuta'] },
+    { label: 'Alertas Clínicas', path: '/alertas', icon: 'bell', roles: ['terapeuta'] },
     { label: 'Generación de Reportes', path: '/reportes', icon: 'report', roles: ['terapeuta', 'paciente'] },
     { label: 'Mensajería', path: '/mensajeria', icon: 'message', roles: ['terapeuta', 'paciente'] },
   ];
