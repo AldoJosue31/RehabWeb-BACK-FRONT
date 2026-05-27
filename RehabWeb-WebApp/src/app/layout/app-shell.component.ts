@@ -1,9 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { EMPTY, Subscription, merge, switchMap, timer, catchError } from 'rxjs';
 import { RoleAccount } from '../services/account-admin.service';
 import { AuthService } from '../services/auth.service';
 import { ClinicalDataService } from '../services/clinical-data.service';
+import { EngagementService, MotivationProfile } from '../services/engagement.service';
 
 type NavIcon = 'pulse' | 'users' | 'routine' | 'history' | 'chart' | 'bell' | 'report' | 'message' | 'settings';
 
@@ -114,6 +116,10 @@ interface NavItem {
         </nav>
 
         <div class="border-t border-line p-4">
+          @if (role() === 'paciente') {
+            <ng-container [ngTemplateOutlet]="motivationMetrics" [ngTemplateOutletContext]="{ compact: collapsed() }"></ng-container>
+          }
+
           <div class="flex items-center gap-3">
             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-low text-sm font-bold text-primary">
               {{ initials() }}
@@ -216,6 +222,10 @@ interface NavItem {
             </nav>
 
             <div class="shrink-0 border-t border-line p-4">
+              @if (role() === 'paciente') {
+                <ng-container [ngTemplateOutlet]="motivationMetrics" [ngTemplateOutletContext]="{ compact: false }"></ng-container>
+              }
+
               <div class="flex items-center gap-3">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-low text-sm font-bold text-primary">
                   {{ initials() }}
@@ -266,16 +276,170 @@ interface NavItem {
         }
       }
     </ng-template>
+
+    <ng-template #motivationMetrics let-compact="compact">
+      <section
+        class="mb-4"
+        [ngClass]="compact ? 'grid justify-items-center gap-2' : 'grid grid-cols-2 gap-3'"
+        aria-label="Resumen de motivacion del paciente"
+      >
+        <article
+          class="motivation-metric relative min-w-0 rounded-md border text-center shadow-sm"
+          [ngClass]="[
+            compact ? 'grid h-[70px] w-14 place-items-center px-1 pb-2 pt-4' : 'px-3 py-3',
+            hasActiveStreak() ? 'border-warning/50 bg-warning/10 text-warning' : 'border-line bg-app text-muted'
+          ]"
+          [class.motivation-metric--changed]="streakChange() !== null"
+          [attr.title]="compact ? streakDays() + ' dias de racha' : null"
+        >
+          @if (streakChange(); as change) {
+            <span
+              class="motivation-pop absolute rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none shadow-sm"
+              [ngClass]="[
+                compact ? 'left-1 right-1 top-1 truncate text-center' : 'right-2 top-2',
+                change > 0 ? 'bg-warning text-white' : 'bg-danger-bg text-danger'
+              ]"
+            >
+              {{ streakChangeLabel() }}
+            </span>
+          }
+
+          <div class="grid place-items-center" [ngClass]="compact ? 'gap-1' : 'gap-2'">
+            <span class="grid shrink-0 place-items-center" [ngClass]="compact ? 'h-6 w-6' : 'h-9 w-9'">
+              @if (hasActiveStreak()) {
+                <svg class="h-full w-full" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                  <path d="M25.7 4.4c1.5 6.5 8.8 8.8 8.8 18 0 8-5.4 14.1-12.3 14.1-6.5 0-11.7-4.9-11.7-11.8 0-5.6 3.1-9 6.2-12.5.2 3.7 1.8 6 4.2 7.4.7-6.5 1.7-10.8 4.8-15.2Z" fill="currentColor" />
+                  <path d="M22.7 43.5c-8.4 0-15.2-6.7-15.2-15 0-4.7 2.1-8.4 5.3-12.2-.4 2.5-.1 5 1.2 7.1 1.1 1.8 2.9 3.1 5.1 3.8.3-7.7 2.8-13.9 7-18.8-.6 5.6 6.8 8.6 9.8 14 1.5 2.8 2.2 5.8 1.7 9.1-1.1 7.1-7 12-14.9 12Z" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M24.3 37.2c3.8-.7 6.4-3.4 6.4-7 0-3.1-2.1-5.5-4-7.8-.7 3.3-2.3 5.5-4.9 7-1.4-1.5-2.1-3.2-2.2-5.2-2 2-3.1 4.2-3.1 6.6 0 3.8 3.1 6.6 7.8 6.4Z" fill="white" opacity=".72" />
+                </svg>
+              } @else {
+                <svg class="h-full w-full" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                  <path d="M25.7 6.3c1.2 5.4 6.9 7.6 6.9 15.1 0 6.4-4.5 11.2-10.5 11.2-5.8 0-10.3-4.3-10.3-10.1 0-4.3 2.3-7.1 5.1-10.3.2 3 1.5 4.9 3.5 6 1-5.1 2.2-8.8 5.3-11.9Z" fill="currentColor" opacity=".18" />
+                  <path d="M15.2 38.8c3.2-1.1 5.8-1.1 8.8 0 3.2 1.2 5.8 1.2 8.8 0M13.1 33.9c3.7-1.5 6.6-1.5 10 0 3.7 1.6 6.7 1.6 10.3 0" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+                  <path d="M22.1 32.6c-5.8 0-10.3-4.3-10.3-10.1 0-4.3 2.3-7.1 5.1-10.3.2 3 1.5 4.9 3.5 6 1-5.1 2.2-8.8 5.3-11.9 1.2 5.4 6.9 7.6 6.9 15.1 0 3.4-1.3 6.3-3.5 8.2M9.2 8.8l29.6 29.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              }
+            </span>
+
+            @if (!compact) {
+              <div class="min-w-0">
+                <p class="m-0 text-[11px] font-bold uppercase tracking-wide">Racha</p>
+                <p class="m-0 mt-1 text-base font-black leading-solid text-main">{{ streakDays() }} {{ streakDays() === 1 ? 'dia' : 'dias' }}</p>
+              </div>
+            } @else {
+              <strong class="block max-w-full truncate text-[11px] font-black leading-none text-main tabular-nums">{{ streakDays() }}</strong>
+            }
+          </div>
+        </article>
+
+        <article
+          class="motivation-metric relative min-w-0 rounded-md border border-info/40 bg-info/10 text-center text-info shadow-sm"
+          [ngClass]="compact ? 'grid h-[70px] w-14 place-items-center px-1 pb-2 pt-4' : 'px-3 py-3'"
+          [class.motivation-metric--changed]="pointsChange() !== null"
+          [attr.title]="compact ? currentPoints() + ' puntos' : null"
+        >
+          @if (pointsChange(); as change) {
+            <span
+              class="motivation-pop absolute rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none shadow-sm"
+              [ngClass]="[
+                compact ? 'left-1 right-1 top-1 truncate text-center' : 'right-2 top-2',
+                change > 0 ? 'bg-info text-white' : 'bg-danger-bg text-danger'
+              ]"
+            >
+              {{ pointsChangeLabel() }}
+            </span>
+          }
+
+          <div class="grid place-items-center" [ngClass]="compact ? 'gap-1' : 'gap-2'">
+            <span class="grid shrink-0 place-items-center" [ngClass]="compact ? 'h-6 w-6' : 'h-9 w-9'">
+              <svg class="h-full w-full" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                <path d="m24 5.2 4.7 9.6 10.6 1.5-7.7 7.5 1.8 10.5-9.4-5-9.4 5 1.8-10.5-7.7-7.5 10.6-1.5L24 5.2Z" fill="currentColor" opacity=".9" />
+                <path d="m24 5.2 4.7 9.6 10.6 1.5-7.7 7.5 1.8 10.5-9.4-5-9.4 5 1.8-10.5-7.7-7.5 10.6-1.5L24 5.2Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" />
+                <path d="m37.5 31.4 1.5 3 3.3.5-2.4 2.3.6 3.3-3-1.6-3 1.6.6-3.3-2.4-2.3 3.3-.5 1.5-3ZM10.5 29.8l1.3 2.6 2.9.4-2.1 2 .5 2.9-2.6-1.4-2.6 1.4.5-2.9-2.1-2 2.9-.4 1.3-2.6Z" fill="currentColor" opacity=".7" />
+                <path d="m21.7 17.3 2.3-4.8 2.3 4.8 5.2.8-3.8 3.7.9 5.2-4.6-2.4-4.6 2.4.9-5.2-3.8-3.7 5.2-.8Z" fill="white" opacity=".6" />
+              </svg>
+            </span>
+
+            @if (!compact) {
+              <div class="min-w-0">
+                <p class="m-0 text-[11px] font-bold uppercase tracking-wide">Puntos</p>
+                <p class="m-0 mt-1 text-base font-black leading-solid text-main">{{ currentPoints() | number:'1.0-0' }}</p>
+              </div>
+            } @else {
+              <strong class="block max-w-full truncate text-[11px] font-black leading-none text-main tabular-nums">{{ currentPoints() }}</strong>
+            }
+          </div>
+        </article>
+      </section>
+    </ng-template>
   `,
+  styles: [`
+    .motivation-metric {
+      transition:
+        transform var(--baseline-motion-medium) var(--baseline-motion-ease),
+        box-shadow var(--baseline-motion-medium) var(--baseline-motion-ease);
+    }
+
+    .motivation-metric--changed {
+      animation: motivation-glow 900ms var(--baseline-motion-ease) both;
+    }
+
+    .motivation-pop {
+      animation: motivation-pop 1400ms var(--baseline-motion-ease) both;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    @keyframes motivation-pop {
+      0% {
+        opacity: 0;
+        transform: translateY(4px) scale(0.82);
+      }
+      16% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      76% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.96);
+      }
+    }
+
+    @keyframes motivation-glow {
+      0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 28%, transparent);
+      }
+      38% {
+        transform: scale(1.035);
+        box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 14%, transparent);
+      }
+      100% {
+        transform: scale(1);
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+      }
+    }
+  `],
 })
-export class AppShellComponent implements OnInit {
+export class AppShellComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private clinicalDataService = inject(ClinicalDataService);
+  private engagementService = inject(EngagementService);
   private router = inject(Router);
+  private subscriptions = new Subscription();
+  private pointsChangeTimeout: ReturnType<typeof setTimeout> | null = null;
+  private streakChangeTimeout: ReturnType<typeof setTimeout> | null = null;
+  private motivationInitialized = false;
 
   collapsed = signal(false);
   mobileMenuOpen = signal(false);
   currentAccount = signal<RoleAccount | null>(null);
+  motivationStats = signal<MotivationProfile | null>(null);
+  pointsChange = signal<number | null>(null);
+  streakChange = signal<number | null>(null);
 
   private mainNavItems: NavItem[] = [
     { label: 'Tablero de Control', path: '/tablero-control', icon: 'pulse', roles: ['terapeuta', 'paciente'] },
@@ -297,6 +461,9 @@ export class AppShellComponent implements OnInit {
   settingsNav = computed(() => this.settingsNavItems.filter((item) => item.roles.includes(this.role())));
   allNav = computed(() => [...this.mainNav(), ...this.settingsNav()]);
   displayName = computed(() => this.clinicalDataService.displayName(this.currentAccount()));
+  streakDays = computed(() => Math.max(0, this.motivationStats()?.current_streak ?? this.currentAccount()?.current_streak ?? 0));
+  currentPoints = computed(() => Math.max(0, this.motivationStats()?.total_points ?? this.currentAccount()?.total_points ?? 0));
+  hasActiveStreak = computed(() => this.streakDays() > 0);
   initials = computed(() => {
     const parts = this.displayName().trim().split(/\s+/).filter(Boolean);
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
@@ -312,7 +479,16 @@ export class AppShellComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.clinicalDataService.currentAccount().subscribe((account) => this.currentAccount.set(account));
+    this.subscriptions.add(
+      this.clinicalDataService.currentAccount().subscribe((account) => this.currentAccount.set(account)),
+    );
+    this.startMotivationSync();
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+    this.clearPointsChange();
+    this.clearStreakChange();
   }
 
   toggleCollapsed(): void {
@@ -331,5 +507,77 @@ export class AppShellComponent implements OnInit {
     this.closeMobileMenu();
     this.authService.logout();
     void this.router.navigateByUrl('/login');
+  }
+
+  pointsChangeLabel(): string {
+    const change = this.pointsChange() ?? 0;
+    return `${change > 0 ? '+' : ''}${change}`;
+  }
+
+  streakChangeLabel(): string {
+    const change = this.streakChange() ?? 0;
+    const abs = Math.abs(change);
+    const unit = abs === 1 ? 'dia' : 'dias';
+    return `${change > 0 ? '+' : ''}${change} ${unit}`;
+  }
+
+  private startMotivationSync(): void {
+    if (typeof window === 'undefined' || this.role() !== 'paciente') return;
+
+    this.subscriptions.add(
+      merge(timer(0, 5000), this.engagementService.motivationRefreshes$)
+        .pipe(
+          switchMap(() =>
+            this.engagementService.getMotivation().pipe(catchError(() => EMPTY)),
+          ),
+        )
+        .subscribe((stats) => this.applyMotivationStats(stats)),
+    );
+  }
+
+  private applyMotivationStats(stats: MotivationProfile): void {
+    const previous = this.motivationStats();
+    this.motivationStats.set(stats);
+
+    if (!this.motivationInitialized) {
+      this.motivationInitialized = true;
+      return;
+    }
+
+    const previousPoints = previous?.total_points ?? this.currentAccount()?.total_points ?? stats.total_points;
+    const previousStreak = previous?.current_streak ?? this.currentAccount()?.current_streak ?? stats.current_streak;
+    const pointsDelta = stats.total_points - previousPoints;
+    const streakDelta = stats.current_streak - previousStreak;
+
+    if (pointsDelta !== 0) this.showPointsChange(pointsDelta);
+    if (streakDelta !== 0) this.showStreakChange(streakDelta);
+  }
+
+  private showPointsChange(delta: number): void {
+    this.clearPointsChange();
+    this.pointsChange.set(delta);
+    this.pointsChangeTimeout = setTimeout(() => this.clearPointsChange(), 1500);
+  }
+
+  private showStreakChange(delta: number): void {
+    this.clearStreakChange();
+    this.streakChange.set(delta);
+    this.streakChangeTimeout = setTimeout(() => this.clearStreakChange(), 1500);
+  }
+
+  private clearPointsChange(): void {
+    if (this.pointsChangeTimeout) {
+      clearTimeout(this.pointsChangeTimeout);
+      this.pointsChangeTimeout = null;
+    }
+    this.pointsChange.set(null);
+  }
+
+  private clearStreakChange(): void {
+    if (this.streakChangeTimeout) {
+      clearTimeout(this.streakChangeTimeout);
+      this.streakChangeTimeout = null;
+    }
+    this.streakChange.set(null);
   }
 }

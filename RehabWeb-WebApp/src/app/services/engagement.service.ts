@@ -1,6 +1,6 @@
 import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable, Subject, map } from 'rxjs';
 
 export interface RehabAlert {
   id: string;
@@ -47,6 +47,18 @@ export interface MotivationProfile {
   current_streak: number;
   best_streak: number;
   last_session_date: string | null;
+  level: {
+    name: string;
+    color: string;
+    description: string;
+    progress: number;
+    points_to_next: number;
+  };
+  streak_status: 'intacta' | 'en_peligro' | 'perdida';
+  streak_bonus_percent: number;
+  streak_hours_remaining: number | null;
+  next_session_streak: number;
+  next_session_streak_bonus_percent: number;
   leaderboard_opt_in: boolean;
   leaderboard_enabled: boolean;
   updated_at: string;
@@ -68,6 +80,13 @@ export interface WeeklySummary {
   sessions_completed: number;
   sessions_scheduled: number;
   points_obtained: number;
+  completion_percentage: number;
+  daily_activity: Array<{
+    date: string;
+    day: string;
+    points: number;
+    completed: boolean;
+  }>;
   sent_at: string | null;
   created_at: string;
 }
@@ -89,6 +108,9 @@ export interface MessagePage {
 export class EngagementService {
   private http = inject(HttpClient);
   private apiUrl = '/api';
+  private motivationRefreshSubject = new Subject<void>();
+
+  motivationRefreshes$ = this.motivationRefreshSubject.asObservable();
 
   getAlerts(): Observable<RehabAlert[]> {
     return this.http.get<RehabAlert[]>(`${this.apiUrl}/alerts/`);
@@ -116,6 +138,10 @@ export class EngagementService {
 
   getMotivation(): Observable<MotivationProfile> {
     return this.http.get<MotivationProfile>(`${this.apiUrl}/motivation/me/`);
+  }
+
+  notifyMotivationChanged(): void {
+    this.motivationRefreshSubject.next();
   }
 
   updateMotivation(payload: Partial<MotivationProfile>): Observable<MotivationProfile> {

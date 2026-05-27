@@ -9,6 +9,7 @@ import {
   ExerciseSession,
   MotivationProfile,
   PatientBadge,
+  WeeklySummary,
 } from '../../services/engagement.service';
 import { RoutineAssignment, RoutineExerciseItem, RoutineService, Notification } from '../../services/routine.service';
 
@@ -222,6 +223,25 @@ const BADGE_DEFINITIONS: BadgeDefinition[] = [
                 </label>
               </div>
 
+              @if (role() === 'paciente' && motivation(); as stats) {
+                <div class="rounded-md border border-primary/30 bg-primary-low p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p class="m-0 text-xs font-bold uppercase tracking-wide text-primary">Vista previa de puntos</p>
+                      <p class="m-0 mt-1 text-sm text-secondary">
+                        Se calcula con repeticiones, bonus de velocidad y bono de racha.
+                      </p>
+                    </div>
+                    <span class="rounded-md bg-surface px-4 py-2 text-xl font-bold text-primary">+{{ projectedPoints() }}</span>
+                  </div>
+                  <div class="mt-3 grid gap-2 text-xs text-secondary sm:grid-cols-3">
+                    <span>Base: <strong>{{ sessionForm.controls.repetitions_completed.value }}</strong></span>
+                    <span>Velocidad: <strong>+{{ projectedSpeedBonus() }}</strong></span>
+                    <span>Racha prox.: <strong>{{ stats.next_session_streak }} d / +{{ stats.next_session_streak_bonus_percent }}%</strong></span>
+                  </div>
+                </div>
+              }
+
               <button class="rw-action rw-action--primary" type="button" [disabled]="sessionForm.invalid || saving()" (click)="submit()">
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
                 Guardar sesi&oacute;n
@@ -231,20 +251,98 @@ const BADGE_DEFINITIONS: BadgeDefinition[] = [
 
           <div class="grid gap-5">
             @if (role() === 'paciente' && motivation(); as stats) {
-              <div class="grid gap-4 md:grid-cols-3">
+              <div class="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
                 <article class="rw-card rw-card-pad">
-                  <p class="m-0 text-sm text-secondary">Puntos totales</p>
-                  <p class="mt-2 text-2xl font-bold text-main">{{ stats.total_points }}</p>
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p class="m-0 text-sm text-secondary">Nivel actual</p>
+                      <h2 class="m-0 mt-1 text-xl font-bold text-main">{{ stats.level.name }}</h2>
+                      <p class="m-0 mt-1 text-sm text-secondary">{{ stats.level.description }}</p>
+                    </div>
+                    <span class="rounded-md bg-surface px-4 py-2 text-sm font-bold text-primary">{{ stats.total_points }} pts</span>
+                  </div>
+                  <div class="mt-4 h-3 overflow-hidden rounded-full bg-line">
+                    <div class="h-full rounded-full" [style.width.%]="stats.level.progress" [style.background-color]="stats.level.color"></div>
+                  </div>
+                  <p class="m-0 mt-2 text-xs text-secondary">
+                    @if (stats.level.points_to_next > 0) {
+                      {{ stats.level.points_to_next }} puntos para el siguiente nivel
+                    } @else {
+                      Nivel maximo alcanzado
+                    }
+                  </p>
                 </article>
                 <article class="rw-card rw-card-pad">
-                  <p class="m-0 text-sm text-secondary">Racha activa</p>
-                  <p class="mt-2 text-2xl font-bold text-primary">{{ stats.current_streak }}</p>
-                </article>
-                <article class="rw-card rw-card-pad">
-                  <p class="m-0 text-sm text-secondary">Mejor racha</p>
-                  <p class="mt-2 text-2xl font-bold text-info">{{ stats.best_streak }}</p>
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p class="m-0 text-sm text-secondary">Racha de cumplimiento</p>
+                      <p class="m-0 mt-1 text-2xl font-bold text-primary">{{ stats.current_streak }} dias</p>
+                    </div>
+                    <span class="rounded-md px-3 py-1 text-xs font-bold" [ngClass]="streakBadgeClass(stats.streak_status)">
+                      {{ streakLabel(stats.streak_status) }}
+                    </span>
+                  </div>
+                  <div class="mt-3 grid gap-2 text-sm text-secondary">
+                    <span>Mejor racha: <strong>{{ stats.best_streak }}</strong></span>
+                    <span>Bonificacion activa: <strong>+{{ stats.streak_bonus_percent }}%</strong></span>
+                  </div>
+                  <div class="mt-3 h-2 overflow-hidden rounded-full bg-line">
+                    <div class="h-full rounded-full bg-info" [style.width.%]="stats.streak_bonus_percent * 2"></div>
+                  </div>
+                  @if (stats.streak_status === 'en_peligro' && stats.streak_hours_remaining) {
+                    <p class="m-0 mt-3 rounded-md bg-warning/10 p-3 text-xs font-bold text-warning">
+                      Tu racha vence en {{ stats.streak_hours_remaining }} h. Completa una sesion hoy.
+                    </p>
+                  } @else if (stats.streak_status === 'perdida') {
+                    <p class="m-0 mt-3 rounded-md bg-danger-bg p-3 text-xs font-bold text-danger">
+                      Tu racha se perdio. Hoy puedes iniciar una nueva.
+                    </p>
+                  }
                 </article>
               </div>
+
+              @if (weeklySummary(); as summary) {
+                <article class="rw-card rw-card-pad">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 class="m-0 text-lg font-bold text-main">Resumen semanal</h2>
+                      <p class="m-0 mt-1 text-sm text-secondary">
+                        {{ summary.week_start | date:'mediumDate' }} - {{ summary.week_end | date:'mediumDate' }}
+                      </p>
+                    </div>
+                    <span class="rounded-md bg-primary-low px-3 py-1 text-xs font-bold text-primary">{{ summary.completion_percentage }}% cumplimiento</span>
+                  </div>
+                  <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-md bg-app p-3">
+                      <p class="m-0 text-xs text-secondary">Sesiones</p>
+                      <p class="m-0 mt-1 text-xl font-bold text-main">{{ summary.sessions_completed }}/{{ summary.sessions_scheduled }}</p>
+                    </div>
+                    <div class="rounded-md bg-app p-3">
+                      <p class="m-0 text-xs text-secondary">Puntos</p>
+                      <p class="m-0 mt-1 text-xl font-bold text-primary">{{ summary.points_obtained }}</p>
+                    </div>
+                    <div class="rounded-md bg-app p-3">
+                      <p class="m-0 text-xs text-secondary">Mejor racha</p>
+                      <p class="m-0 mt-1 text-xl font-bold text-info">{{ stats.best_streak }}</p>
+                    </div>
+                  </div>
+                  <div class="mt-4 grid h-28 grid-cols-7 items-end gap-2">
+                    @for (day of summary.daily_activity; track day.date) {
+                      <div class="grid h-full grid-rows-[1fr_auto] gap-2 text-center">
+                        <div class="flex items-end rounded-md bg-app px-1">
+                          <div
+                            class="w-full rounded-t-md"
+                            [ngClass]="day.completed ? 'bg-primary' : 'bg-line'"
+                            [style.height.%]="dailyBarHeight(day.points)"
+                            [title]="day.points + ' puntos'"
+                          ></div>
+                        </div>
+                        <span class="text-xs font-bold text-secondary">{{ day.day }}</span>
+                      </div>
+                    }
+                  </div>
+                </article>
+              }
 
               <article class="rw-card rw-card-pad">
                 <div class="flex flex-wrap items-center justify-between gap-3">
@@ -393,6 +491,7 @@ export class SessionsComponent implements OnInit {
   sessions = signal<ExerciseSession[]>([]);
   patients = signal<RoleAccount[]>([]);
   motivation = signal<MotivationProfile | null>(null);
+  weeklySummary = signal<WeeklySummary | null>(null);
   badges = signal<PatientBadge[]>([]);
   badgeVisibility = signal<BadgeVisibility>('all');
   assignments = signal<RoutineAssignment[]>([]);
@@ -453,6 +552,7 @@ export class SessionsComponent implements OnInit {
     if (this.role() === 'paciente') {
       this.engagementService.getMotivation().subscribe((stats) => this.motivation.set(stats));
       this.engagementService.getBadges().subscribe((badges) => this.badges.set(badges));
+      this.engagementService.getWeeklySummary().subscribe((summary) => this.weeklySummary.set(summary));
       this.routineService.getAssignments().subscribe((assignments) => this.assignments.set(assignments));
       this.routineService.getNotifications().subscribe((notifications) => {
         this.notifications.set(notifications.filter((notification) => !notification.is_read));
@@ -485,8 +585,10 @@ export class SessionsComponent implements OnInit {
         this.saving.set(false);
         this.celebrate();
         if (this.role() === 'paciente') {
+          this.engagementService.notifyMotivationChanged();
           this.engagementService.getMotivation().subscribe((stats) => this.motivation.set(stats));
           this.engagementService.getBadges().subscribe((badges) => this.badges.set(badges));
+          this.engagementService.getWeeklySummary().subscribe((summary) => this.weeklySummary.set(summary));
         }
       },
       error: () => this.saving.set(false),
@@ -500,6 +602,48 @@ export class SessionsComponent implements OnInit {
   setBadgeVisibility(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
     this.badgeVisibility.set(value === 'earned' ? 'earned' : 'all');
+  }
+
+  projectedSpeedBonus(): number {
+    const repetitions = Number(this.sessionForm.controls.repetitions_completed.value) || 0;
+    const durationSeconds = Number(this.sessionForm.controls.duration_seconds.value) || 0;
+    const plannedDurationSeconds = Number(this.sessionForm.controls.planned_duration_seconds.value) || 0;
+    if (!repetitions || !durationSeconds) return 0;
+
+    if (plannedDurationSeconds) {
+      const tenMinutesEarly = durationSeconds <= Math.max(plannedDurationSeconds - 600, 0);
+      const twentyPercentFaster = durationSeconds <= plannedDurationSeconds * 0.8;
+      return tenMinutesEarly || twentyPercentFaster ? Math.max(1, Math.round(repetitions * 0.1)) : 0;
+    }
+
+    const repsPerMinute = repetitions / Math.max(durationSeconds / 60, 1);
+    if (repsPerMinute >= 30) return Math.max(1, Math.round(repetitions * 0.25));
+    if (repsPerMinute >= 15) return Math.max(1, Math.round(repetitions * 0.1));
+    return 0;
+  }
+
+  projectedPoints(): number {
+    const repetitions = Number(this.sessionForm.controls.repetitions_completed.value) || 0;
+    const speedBonus = this.projectedSpeedBonus();
+    const streakBonus = this.motivation()?.next_session_streak_bonus_percent ?? 0;
+    return Math.round((repetitions + speedBonus) * (1 + streakBonus / 100));
+  }
+
+  streakLabel(status: MotivationProfile['streak_status']): string {
+    if (status === 'intacta') return 'Activa';
+    if (status === 'en_peligro') return 'En peligro';
+    return 'Perdida';
+  }
+
+  streakBadgeClass(status: MotivationProfile['streak_status']): string {
+    if (status === 'intacta') return 'bg-primary-low text-primary';
+    if (status === 'en_peligro') return 'bg-warning/10 text-warning';
+    return 'bg-danger-bg text-danger';
+  }
+
+  dailyBarHeight(points: number): number {
+    const maxPoints = Math.max(...(this.weeklySummary()?.daily_activity ?? []).map((day) => day.points), 1);
+    return Math.max(10, Math.round((points / maxPoints) * 100));
   }
 
   prepareAssignedExercise(item: RoutineExerciseItem): void {

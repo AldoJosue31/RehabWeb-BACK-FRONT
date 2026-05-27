@@ -26,9 +26,12 @@ from RehabWeb_API.services import (
     estimate_routine_duration,
     finalize_session_metrics,
     is_minor,
+    motivation_level_for_points,
+    next_session_projection,
     patient_has_initial_evaluation,
     refresh_assignment_status,
     reset_expired_streak,
+    streak_status_for_profile,
     therapist_for_patient,
     validate_routine_for_patient,
 )
@@ -674,6 +677,12 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 class MotivationProfileSerializer(serializers.ModelSerializer):
     leaderboard_enabled = serializers.SerializerMethodField()
+    level = serializers.SerializerMethodField()
+    streak_status = serializers.SerializerMethodField()
+    streak_bonus_percent = serializers.SerializerMethodField()
+    streak_hours_remaining = serializers.SerializerMethodField()
+    next_session_streak = serializers.SerializerMethodField()
+    next_session_streak_bonus_percent = serializers.SerializerMethodField()
 
     class Meta:
         model = MotivationProfile
@@ -682,6 +691,12 @@ class MotivationProfileSerializer(serializers.ModelSerializer):
             'current_streak',
             'best_streak',
             'last_session_date',
+            'level',
+            'streak_status',
+            'streak_bonus_percent',
+            'streak_hours_remaining',
+            'next_session_streak',
+            'next_session_streak_bonus_percent',
             'leaderboard_opt_in',
             'leaderboard_enabled',
             'updated_at',
@@ -689,6 +704,24 @@ class MotivationProfileSerializer(serializers.ModelSerializer):
 
     def get_leaderboard_enabled(self, obj):
         return not is_minor(obj.usuario)
+
+    def get_level(self, obj):
+        return motivation_level_for_points(obj.total_points)
+
+    def get_streak_status(self, obj):
+        return streak_status_for_profile(obj)['status']
+
+    def get_streak_bonus_percent(self, obj):
+        return streak_status_for_profile(obj)['bonus_percent']
+
+    def get_streak_hours_remaining(self, obj):
+        return streak_status_for_profile(obj)['hours_remaining']
+
+    def get_next_session_streak(self, obj):
+        return next_session_projection(obj)['streak_days']
+
+    def get_next_session_streak_bonus_percent(self, obj):
+        return next_session_projection(obj)['streak_bonus_percent']
 
     def validate_leaderboard_opt_in(self, value):
         if value and is_minor(self.instance.usuario):
@@ -714,6 +747,9 @@ class PatientBadgeSerializer(serializers.ModelSerializer):
 
 
 class WeeklySummarySerializer(serializers.ModelSerializer):
+    completion_percentage = serializers.SerializerMethodField()
+    daily_activity = serializers.SerializerMethodField()
+
     class Meta:
         model = WeeklySummary
         fields = [
@@ -723,9 +759,40 @@ class WeeklySummarySerializer(serializers.ModelSerializer):
             'sessions_completed',
             'sessions_scheduled',
             'points_obtained',
+            'completion_percentage',
+            'daily_activity',
             'sent_at',
             'created_at',
         ]
+
+    def get_completion_percentage(self, obj):
+        if not obj.sessions_scheduled:
+            return 0
+        return round((obj.sessions_completed / obj.sessions_scheduled) * 100)
+
+    def get_daily_activity(self, obj):
+        sessions = ExerciseSession.objects.filter(
+            paciente=obj.paciente,
+            performed_at__date__gte=obj.week_start,
+            performed_at__date__lte=obj.week_end,
+        )
+        points_by_day = {}
+        for session in sessions:
+            session_date = timezone.localdate(session.performed_at)
+            points_by_day[session_date] = points_by_day.get(session_date, 0) + session.points_awarded
+
+        labels = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+        days = []
+        for offset in range(7):
+            day = obj.week_start + timedelta(days=offset)
+            points = points_by_day.get(day, 0)
+            days.append({
+                'date': day.isoformat(),
+                'day': labels[day.weekday()],
+                'points': points,
+                'completed': points > 0,
+            })
+        return days
 
 
 class LeaderboardEntrySerializer(serializers.ModelSerializer):

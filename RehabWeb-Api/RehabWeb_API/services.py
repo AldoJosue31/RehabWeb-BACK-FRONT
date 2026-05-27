@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -29,6 +29,44 @@ BADGES = {
     'SPEED_20': ('Velocidad', 'Completo una sesion al menos 20% mas rapido.'),
     'COGNITIVE_5': ('Cerebro Ganador', 'Completo ejercicios cognitivos 5 veces.'),
 }
+
+MOTIVATION_LEVELS = [
+    {
+        'name': 'Novato',
+        'min_points': 0,
+        'max_points': 499,
+        'color': '#78909C',
+        'description': 'Dando los primeros pasos',
+    },
+    {
+        'name': 'Perseverante',
+        'min_points': 500,
+        'max_points': 1499,
+        'color': '#29B6F6',
+        'description': 'La constancia te define',
+    },
+    {
+        'name': 'Guerrero',
+        'min_points': 1500,
+        'max_points': 3499,
+        'color': '#AB47BC',
+        'description': 'Forjado en el esfuerzo',
+    },
+    {
+        'name': 'Maestro',
+        'min_points': 3500,
+        'max_points': 7499,
+        'color': '#FFA726',
+        'description': 'Dominas tu recuperacion',
+    },
+    {
+        'name': 'Leyenda',
+        'min_points': 7500,
+        'max_points': None,
+        'color': '#EF5350',
+        'description': 'Inspiracion para todos',
+    },
+]
 
 MOBILITY_ORDER = {
     'dependiente': 0,
@@ -247,6 +285,98 @@ def calculate_speed_bonus(repetitions, duration_seconds, planned_duration_second
     if reps_per_minute >= 15:
         return max(1, round(repetitions * 0.10))
     return 0
+
+
+def motivation_level_for_points(points):
+    points = int(points or 0)
+    level = MOTIVATION_LEVELS[-1]
+    for candidate in MOTIVATION_LEVELS:
+        max_points = candidate['max_points']
+        if points >= candidate['min_points'] and (max_points is None or points <= max_points):
+            level = candidate
+            break
+
+    next_level = next(
+        (
+            candidate
+            for candidate in MOTIVATION_LEVELS
+            if candidate['min_points'] > level['min_points']
+        ),
+        None,
+    )
+    points_to_next = max(next_level['min_points'] - points, 0) if next_level else 0
+    if level['max_points'] is None:
+        progress = 100
+    else:
+        span = max(level['max_points'] - level['min_points'], 1)
+        progress = round(((points - level['min_points']) / span) * 100)
+
+    return {
+        'name': level['name'],
+        'color': level['color'],
+        'description': level['description'],
+        'progress': min(max(progress, 0), 100),
+        'points_to_next': points_to_next,
+    }
+
+
+def streak_bonus_percent(streak_days):
+    return min(50, max(0, (int(streak_days or 0) - 1) * 10))
+
+
+def _hours_until_end_of_day(reference_date):
+    now = timezone.localtime()
+    tomorrow = reference_date + timedelta(days=1)
+    deadline = timezone.make_aware(datetime.combine(tomorrow, time.min), timezone.get_current_timezone())
+    seconds = max((deadline - now).total_seconds(), 0)
+    return int((seconds + 3599) // 3600)
+
+
+def streak_status_for_profile(profile, reference_date=None):
+    reference_date = reference_date or timezone.localdate()
+    current_streak = int(profile.current_streak or 0)
+
+    if not profile.last_session_date or current_streak == 0:
+        return {
+            'status': 'perdida',
+            'bonus_percent': 0,
+            'hours_remaining': None,
+        }
+
+    if profile.last_session_date == reference_date:
+        return {
+            'status': 'intacta',
+            'bonus_percent': streak_bonus_percent(current_streak),
+            'hours_remaining': None,
+        }
+
+    if profile.last_session_date == reference_date - timedelta(days=1):
+        return {
+            'status': 'en_peligro',
+            'bonus_percent': streak_bonus_percent(current_streak),
+            'hours_remaining': _hours_until_end_of_day(reference_date),
+        }
+
+    return {
+        'status': 'perdida',
+        'bonus_percent': 0,
+        'hours_remaining': None,
+    }
+
+
+def next_session_projection(profile, reference_date=None):
+    reference_date = reference_date or timezone.localdate()
+    if profile.last_session_date == reference_date:
+        next_streak = profile.current_streak or 1
+    elif profile.last_session_date == reference_date - timedelta(days=1):
+        next_streak = (profile.current_streak or 0) + 1
+    else:
+        next_streak = 1
+
+    return {
+        'streak_days': next_streak,
+        'streak_bonus_percent': streak_bonus_percent(next_streak),
+    }
 
 
 def reset_expired_streak(profile, reference_date=None):
