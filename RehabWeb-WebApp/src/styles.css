@@ -361,6 +361,87 @@
     background: var(--baseline-primary);
     color: #fff;
   }
+
+  .sessions-weekly-bar__metrics > div {
+    place-items: center;
+    align-content: center;
+    min-height: 86px;
+    text-align: center;
+  }
+
+  .sessions-weekly-bar__metrics p,
+  .sessions-weekly-bar__metrics strong {
+    width: 100%;
+  }
+
+  html.theme-dark .badge-card.badge-card {
+    border-color: color-mix(in srgb, var(--badge-accent) 44%, var(--baseline-border));
+    background:
+      radial-gradient(circle at 85% 0%, color-mix(in srgb, var(--badge-accent) 24%, transparent), transparent 34%),
+      linear-gradient(135deg, color-mix(in srgb, var(--badge-accent) 18%, var(--baseline-surface)), var(--baseline-surface) 58%);
+    box-shadow:
+      0 16px 38px rgb(0 0 0 / 0.26),
+      inset 0 1px 0 rgb(255 255 255 / 0.04);
+  }
+
+  html.theme-dark .badge-card.badge-card--locked {
+    border-color: color-mix(in srgb, var(--baseline-muted) 32%, var(--baseline-border));
+    background:
+      radial-gradient(circle at 85% 0%, rgb(148 163 184 / 0.13), transparent 34%),
+      linear-gradient(135deg, color-mix(in srgb, var(--baseline-app) 55%, var(--baseline-surface)), var(--baseline-surface));
+    opacity: 0.92;
+  }
+
+  html.theme-dark .badge-medal.badge-medal {
+    border-color: color-mix(in srgb, var(--badge-accent) 48%, var(--baseline-border));
+    background:
+      radial-gradient(circle at 30% 22%, rgb(255 255 255 / 0.16), transparent 34%),
+      color-mix(in srgb, var(--badge-accent) 18%, var(--baseline-app));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      0 10px 24px color-mix(in srgb, var(--badge-accent) 16%, transparent);
+  }
+
+  html.theme-dark .badge-chip.badge-chip,
+  html.theme-dark .badge-card__body.badge-card__body {
+    background: color-mix(in srgb, var(--badge-accent) 13%, var(--baseline-surface));
+  }
+
+  html.theme-dark .badge-chip.badge-chip--muted {
+    background: color-mix(in srgb, var(--baseline-app) 72%, var(--baseline-surface));
+  }
+}
+
+html.theme-dark .badge-card.badge-card {
+  border-color: color-mix(in srgb, var(--badge-accent) 44%, var(--baseline-border));
+  background:
+    radial-gradient(circle at 85% 0%, color-mix(in srgb, var(--badge-accent) 24%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--badge-accent) 18%, var(--baseline-surface)), var(--baseline-surface) 58%);
+  box-shadow: 0 16px 38px rgb(0 0 0 / 0.26), inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+html.theme-dark .badge-card.badge-card--locked {
+  border-color: color-mix(in srgb, var(--baseline-muted) 32%, var(--baseline-border));
+  background:
+    radial-gradient(circle at 85% 0%, rgb(148 163 184 / 0.13), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--baseline-app) 55%, var(--baseline-surface)), var(--baseline-surface));
+}
+
+html.theme-dark .badge-medal.badge-medal {
+  border-color: color-mix(in srgb, var(--badge-accent) 48%, var(--baseline-border));
+  background:
+    radial-gradient(circle at 30% 22%, rgb(255 255 255 / 0.16), transparent 34%),
+    color-mix(in srgb, var(--badge-accent) 18%, var(--baseline-app));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 10px 24px color-mix(in srgb, var(--badge-accent) 16%, transparent);
+}
+
+html.theme-dark .badge-chip.badge-chip,
+html.theme-dark .badge-card__body.badge-card__body {
+  background: color-mix(in srgb, var(--badge-accent) 13%, var(--baseline-surface));
+}
+
+html.theme-dark .badge-chip.badge-chip--muted {
+  background: color-mix(in srgb, var(--baseline-app) 72%, var(--baseline-surface));
 }
 
 @keyframes rw-route-enter {

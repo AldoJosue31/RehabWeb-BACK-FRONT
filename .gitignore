@@ -14,6 +14,7 @@
 **/*.pyd
 **/*.egg-info/
 **/media/
+**/docs_artifacts/
 
 .env
 *.log
